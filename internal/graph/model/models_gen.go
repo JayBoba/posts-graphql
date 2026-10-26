@@ -2,25 +2,74 @@
 
 package model
 
+import (
+	"time"
+)
+
+type Comment struct {
+	ID        int64              `json:"id"`
+	PostID    int64              `json:"postId"`
+	ParentID  *int64             `json:"parentId,omitempty"`
+	AuthorID  string             `json:"authorId"`
+	Body      string             `json:"body"`
+	CreatedAt time.Time          `json:"createdAt"`
+	Replies   *CommentConnection `json:"replies"`
+}
+
+type CommentConnection struct {
+	Edges    []*CommentEdge `json:"edges"`
+	PageInfo *PageInfo      `json:"pageInfo"`
+}
+
+type CommentEdge struct {
+	Cursor string   `json:"cursor"`
+	Node   *Comment `json:"node"`
+}
+
 type Mutation struct {
 }
 
-type NewTodo struct {
-	Text   string `json:"text"`
-	UserID string `json:"userId"`
+type NewComment struct {
+	PostID   int64  `json:"postId"`
+	ParentID *int64 `json:"parentId,omitempty"`
+	AuthorID string `json:"authorId"`
+	Body     string `json:"body"`
+}
+
+type NewPost struct {
+	AuthorID        string `json:"authorId"`
+	Title           string `json:"title"`
+	Body            string `json:"body"`
+	CommentsEnabled *bool  `json:"commentsEnabled,omitempty"`
+}
+
+type PageInfo struct {
+	EndCursor   *string `json:"endCursor,omitempty"`
+	HasNextPage bool    `json:"hasNextPage"`
+}
+
+type Post struct {
+	ID              int64              `json:"id"`
+	AuthorID        string             `json:"authorId"`
+	Title           string             `json:"title"`
+	Body            string             `json:"body"`
+	CommentsEnabled bool               `json:"commentsEnabled"`
+	CreatedAt       time.Time          `json:"createdAt"`
+	Comments        *CommentConnection `json:"comments"`
+}
+
+type PostConnection struct {
+	Edges    []*PostEdge `json:"edges"`
+	PageInfo *PageInfo   `json:"pageInfo"`
+}
+
+type PostEdge struct {
+	Cursor string `json:"cursor"`
+	Node   *Post  `json:"node"`
 }
 
 type Query struct {
 }
 
-type Todo struct {
-	ID   string `json:"id"`
-	Text string `json:"text"`
-	Done bool   `json:"done"`
-	User *User  `json:"user"`
-}
-
-type User struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+type Subscription struct {
 }

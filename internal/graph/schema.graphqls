@@ -1,28 +1,75 @@
-# GraphQL schema example
-#
-# https://gqlgen.com/getting-started/
+scalar Time
 
-type Todo {
+type Post {
   id: ID!
-  text: String!
-  done: Boolean!
-  user: User!
+  authorId: String!
+  title: String!
+  body: String!
+  commentsEnabled: Boolean!
+  createdAt: Time!
+  comments(first: Int = 20, after: String): CommentConnection!
 }
 
-type User {
+type Comment {
   id: ID!
-  name: String!
+  postId: ID!
+  parentId: ID
+  authorId: String!
+  body: String!
+  createdAt: Time!
+  replies(first: Int = 10, after: String): CommentConnection!
+}
+
+type PageInfo {
+  endCursor: String
+  hasNextPage: Boolean!
+}
+
+type PostEdge {
+  cursor: String!
+  node: Post!
+}
+
+type PostConnection {
+  edges: [PostEdge!]!
+  pageInfo: PageInfo!
+}
+
+type CommentEdge {
+  cursor: String!
+  node: Comment!
+}
+
+type CommentConnection {
+  edges: [CommentEdge!]!
+  pageInfo: PageInfo!
+}
+
+input NewPost {
+  authorId: String!
+  title: String!
+  body: String!
+  commentsEnabled: Boolean = true
+}
+
+input NewComment {
+  postId: ID!
+  parentId: ID
+  authorId: String!
+  body: String!
 }
 
 type Query {
-  todos: [Todo!]!
-}
-
-input NewTodo {
-  text: String!
-  userId: String!
+  posts(first: Int = 20, after: String): PostConnection!
+  post(id: ID!): Post
 }
 
 type Mutation {
-  createTodo(input: NewTodo!): Todo!
+  createPost(input: NewPost!): Post!
+  createComment(input: NewComment!): Comment!
+  setCommentsEnabled(postId: ID!, authorId: String!, enabled: Boolean!): Post!
+}
+
+type Subscription {
+  commentAdded(postId: ID!): Comment!
 }
