@@ -198,10 +198,12 @@ models:
       - github.com/99designs/gqlgen/graphql.Int
       - github.com/99designs/gqlgen/graphql.Int64
   Post:
+    model: github.com/JayBoba/posts-graphql/internal/service.Post
     fields:
       comments:
         resolver: true
   Comment:
+    model: github.com/JayBoba/posts-graphql/internal/service.Comment
     fields:
       replies:
         resolver: true

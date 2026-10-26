@@ -3,18 +3,8 @@
 package model
 
 import (
-	"time"
+	"github.com/JayBoba/posts-graphql/internal/service"
 )
-
-type Comment struct {
-	ID        int64              `json:"id"`
-	PostID    int64              `json:"postId"`
-	ParentID  *int64             `json:"parentId,omitempty"`
-	AuthorID  string             `json:"authorId"`
-	Body      string             `json:"body"`
-	CreatedAt time.Time          `json:"createdAt"`
-	Replies   *CommentConnection `json:"replies"`
-}
 
 type CommentConnection struct {
 	Edges    []*CommentEdge `json:"edges"`
@@ -22,8 +12,8 @@ type CommentConnection struct {
 }
 
 type CommentEdge struct {
-	Cursor string   `json:"cursor"`
-	Node   *Comment `json:"node"`
+	Cursor string           `json:"cursor"`
+	Node   *service.Comment `json:"node"`
 }
 
 type Mutation struct {
@@ -48,24 +38,14 @@ type PageInfo struct {
 	HasNextPage bool    `json:"hasNextPage"`
 }
 
-type Post struct {
-	ID              int64              `json:"id"`
-	AuthorID        string             `json:"authorId"`
-	Title           string             `json:"title"`
-	Body            string             `json:"body"`
-	CommentsEnabled bool               `json:"commentsEnabled"`
-	CreatedAt       time.Time          `json:"createdAt"`
-	Comments        *CommentConnection `json:"comments"`
-}
-
 type PostConnection struct {
 	Edges    []*PostEdge `json:"edges"`
 	PageInfo *PageInfo   `json:"pageInfo"`
 }
 
 type PostEdge struct {
-	Cursor string `json:"cursor"`
-	Node   *Post  `json:"node"`
+	Cursor string        `json:"cursor"`
+	Node   *service.Post `json:"node"`
 }
 
 type Query struct {

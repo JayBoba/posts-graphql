@@ -7,48 +7,107 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/JayBoba/posts-graphql/internal/graph/model"
+	"github.com/JayBoba/posts-graphql/internal/service"
 )
 
 // Replies is the resolver for the replies field.
-func (r *commentResolver) Replies(ctx context.Context, obj *model.Comment, first *int32, after *string) (*model.CommentConnection, error) {
-	panic(fmt.Errorf("not implemented: Replies - replies"))
+func (r *commentResolver) Replies(ctx context.Context, obj *service.Comment, first *int32, after *string) (*model.CommentConnection, error) {
+	afterID, err := decodeCursor(after)
+	if err != nil {
+		return nil, err
+	}
+	page, err := r.Svc.ListComments(ctx, obj.PostID, &obj.ID, afterID, pageSize(first, 10))
+	if err != nil {
+		return nil, err
+	}
+	return commentConnection(page), nil
 }
 
 // CreatePost is the resolver for the createPost field.
-func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) (*model.Post, error) {
-	panic(fmt.Errorf("not implemented: CreatePost - createPost"))
+func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) (*service.Post, error) {
+	enabled := true
+	if input.CommentsEnabled != nil {
+		enabled = *input.CommentsEnabled
+	}
+	post, err := r.Svc.CreatePost(ctx, service.Post{
+		AuthorID:        input.AuthorID,
+		Title:           input.Title,
+		Body:            input.Body,
+		CommentsEnabled: enabled,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &post, nil
 }
 
 // CreateComment is the resolver for the createComment field.
-func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewComment) (*model.Comment, error) {
-	panic(fmt.Errorf("not implemented: CreateComment - createComment"))
+func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewComment) (*service.Comment, error) {
+	c, err := r.Svc.CreateComment(ctx, service.Comment{
+		PostID:   input.PostID,
+		ParentID: input.ParentID,
+		AuthorID: input.AuthorID,
+		Body:     input.Body,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
 }
 
 // SetCommentsEnabled is the resolver for the setCommentsEnabled field.
-func (r *mutationResolver) SetCommentsEnabled(ctx context.Context, postID int64, authorID string, enabled bool) (*model.Post, error) {
-	panic(fmt.Errorf("not implemented: SetCommentsEnabled - setCommentsEnabled"))
+func (r *mutationResolver) SetCommentsEnabled(ctx context.Context, postID int64, authorID string, enabled bool) (*service.Post, error) {
+	post, err := r.Svc.SetCommentsEnabled(ctx, postID, authorID, enabled)
+	if err != nil {
+		return nil, err
+	}
+	return &post, nil
 }
 
 // Comments is the resolver for the comments field.
-func (r *postResolver) Comments(ctx context.Context, obj *model.Post, first *int32, after *string) (*model.CommentConnection, error) {
-	panic(fmt.Errorf("not implemented: Comments - comments"))
+func (r *postResolver) Comments(ctx context.Context, obj *service.Post, first *int32, after *string) (*model.CommentConnection, error) {
+	afterID, err := decodeCursor(after)
+	if err != nil {
+		return nil, err
+	}
+	page, err := r.Svc.ListComments(ctx, obj.ID, nil, afterID, pageSize(first, service.DefaultPageSize))
+	if err != nil {
+		return nil, err
+	}
+	return commentConnection(page), nil
 }
 
 // Posts is the resolver for the posts field.
 func (r *queryResolver) Posts(ctx context.Context, first *int32, after *string) (*model.PostConnection, error) {
-	panic(fmt.Errorf("not implemented: Posts - posts"))
+	afterID, err := decodeCursor(after)
+	if err != nil {
+		return nil, err
+	}
+	page, err := r.Svc.ListPosts(ctx, afterID, pageSize(first, service.DefaultPageSize))
+	if err != nil {
+		return nil, err
+	}
+	return postConnection(page), nil
 }
 
 // Post is the resolver for the post field.
-func (r *queryResolver) Post(ctx context.Context, id int64) (*model.Post, error) {
-	panic(fmt.Errorf("not implemented: Post - post"))
+func (r *queryResolver) Post(ctx context.Context, id int64) (*service.Post, error) {
+	post, err := r.Svc.GetPost(ctx, id)
+	if errors.Is(err, service.ErrPostNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &post, nil
 }
 
 // CommentAdded is the resolver for the commentAdded field.
-func (r *subscriptionResolver) CommentAdded(ctx context.Context, postID int64) (<-chan *model.Comment, error) {
+func (r *subscriptionResolver) CommentAdded(ctx context.Context, postID int64) (<-chan *service.Comment, error) {
 	panic(fmt.Errorf("not implemented: CommentAdded - commentAdded"))
 }
 
