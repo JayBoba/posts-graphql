@@ -9,6 +9,7 @@ type Storage interface {
 	SetCommentsEnabled(ctx context.Context, postID int64, enabled bool) (Post, error)
 	CreateComment(ctx context.Context, c Comment) (Comment, error)
 	ListComments(ctx context.Context, postID int64, parentID *int64, after *int64, limit int) ([]Comment, error)
+	GetComment(ctx context.Context, id int64) (Comment, error)
 }
 
 type Broker interface {

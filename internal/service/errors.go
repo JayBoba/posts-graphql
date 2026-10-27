@@ -8,4 +8,5 @@ var (
 	ErrCommentsDisabled = errors.New("comments are disabled for this post")
 	ErrForbidden        = errors.New("only the post author can do this")
 	ErrInvalidInput     = errors.New("invalid input")
+	ErrCommentNotFound  = errors.New("comment not found")
 )

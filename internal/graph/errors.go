@@ -21,6 +21,9 @@ func ErrorPresenter(ctx context.Context, err error) *gqlerror.Error {
 		code = "NOT_FOUND"
 	case errors.Is(err, service.ErrCommentsDisabled), errors.Is(err, service.ErrForbidden):
 		code = "FORBIDDEN"
+	case errors.Is(err, service.ErrPostNotFound), errors.Is(err, service.ErrParentNotFound),
+		errors.Is(err, service.ErrCommentNotFound):
+		code = "NOT_FOUND"
 	default:
 		// Ошибки самого GraphQL (например, неверный тип аргумента) отдаём как есть.
 		var e *gqlerror.Error

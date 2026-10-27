@@ -62,6 +62,7 @@ input NewComment {
 type Query {
   posts(first: Int = 20, after: String): PostConnection!
   post(id: ID!): Post
+  comment(id: ID!): Comment
 }
 
 type Mutation {

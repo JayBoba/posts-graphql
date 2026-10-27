@@ -35,7 +35,8 @@ func main() {
 
 	svc := service.New(store, pubsub.New())
 
-	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{Svc: svc}}))
+	srv := handler.New(graph.NewExecutableSchema(graph.NewConfig(svc)))
+	srv.Use(extension.FixedComplexityLimit(graph.ComplexityLimit))
 	srv.AddTransport(transport.Websocket{
 		KeepAlivePingInterval: 10 * time.Second,
 	})

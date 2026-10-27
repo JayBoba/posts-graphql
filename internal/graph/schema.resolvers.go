@@ -19,7 +19,7 @@ func (r *commentResolver) Replies(ctx context.Context, obj *service.Comment, fir
 	if err != nil {
 		return nil, err
 	}
-	page, err := r.Svc.ListComments(ctx, obj.PostID, &obj.ID, afterID, pageSize(first, 10))
+	page, err := r.Svc.ListComments(ctx, obj.PostID, &obj.ID, afterID, pageSize(first, defaultRepliesPageSize))
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +103,18 @@ func (r *queryResolver) Post(ctx context.Context, id int64) (*service.Post, erro
 		return nil, err
 	}
 	return &post, nil
+}
+
+// Comment is the resolver for the comment field.
+func (r *queryResolver) Comment(ctx context.Context, id int64) (*service.Comment, error) {
+	c, err := r.Svc.GetComment(ctx, id)
+	if errors.Is(err, service.ErrCommentNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
 }
 
 // CommentAdded is the resolver for the commentAdded field.

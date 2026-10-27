@@ -138,3 +138,14 @@ func (s *Storage) ListComments(_ context.Context, postID int64, parentID *int64,
 	}
 	return res, nil
 }
+
+func (s *Storage) GetComment(_ context.Context, id int64) (service.Comment, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	c, ok := s.comments[id]
+	if !ok {
+		return service.Comment{}, service.ErrCommentNotFound
+	}
+	return c, nil
+}

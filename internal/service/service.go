@@ -112,3 +112,7 @@ func (s *Service) SubscribeComments(ctx context.Context, postID int64) (<-chan *
 	}
 	return s.broker.Subscribe(ctx, postID), nil
 }
+
+func (s *Service) GetComment(ctx context.Context, id int64) (Comment, error) {
+	return s.storage.GetComment(ctx, id)
+}
