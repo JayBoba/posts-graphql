@@ -14,10 +14,11 @@ const (
 
 type Service struct {
 	storage Storage
+	broker  Broker
 }
 
-func New(storage Storage) *Service {
-	return &Service{storage: storage}
+func New(storage Storage, broker Broker) *Service {
+	return &Service{storage: storage, broker: broker}
 }
 
 func (s *Service) CreatePost(ctx context.Context, p Post) (Post, error) {
@@ -71,7 +72,12 @@ func (s *Service) CreateComment(ctx context.Context, c Comment) (Comment, error)
 	case utf8.RuneCountInString(c.Body) > MaxCommentLength:
 		return Comment{}, fmt.Errorf("%w: comment is longer than %d characters", ErrInvalidInput, MaxCommentLength)
 	}
-	return s.storage.CreateComment(ctx, c)
+	saved, err := s.storage.CreateComment(ctx, c)
+	if err != nil {
+		return Comment{}, err
+	}
+	s.broker.Publish(saved)
+	return saved, nil
 }
 
 func (s *Service) ListComments(ctx context.Context, postID int64, parentID, after *int64, first int) (Page[Comment], error) {
@@ -98,4 +104,11 @@ func makePage[T any](items []T, limit int) Page[T] {
 		return Page[T]{Items: items[:limit], HasNext: true}
 	}
 	return Page[T]{Items: items}
+}
+
+func (s *Service) SubscribeComments(ctx context.Context, postID int64) (<-chan *Comment, error) {
+	if _, err := s.storage.GetPost(ctx, postID); err != nil {
+		return nil, err
+	}
+	return s.broker.Subscribe(ctx, postID), nil
 }

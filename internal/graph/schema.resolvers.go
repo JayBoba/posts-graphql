@@ -8,7 +8,6 @@ package graph
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/JayBoba/posts-graphql/internal/graph/model"
 	"github.com/JayBoba/posts-graphql/internal/service"
@@ -108,7 +107,7 @@ func (r *queryResolver) Post(ctx context.Context, id int64) (*service.Post, erro
 
 // CommentAdded is the resolver for the commentAdded field.
 func (r *subscriptionResolver) CommentAdded(ctx context.Context, postID int64) (<-chan *service.Comment, error) {
-	panic(fmt.Errorf("not implemented: CommentAdded - commentAdded"))
+	return r.Svc.SubscribeComments(ctx, postID)
 }
 
 // Comment returns CommentResolver implementation.

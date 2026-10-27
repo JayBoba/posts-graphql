@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/extension"
@@ -14,6 +15,7 @@ import (
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/JayBoba/posts-graphql/internal/graph"
+	"github.com/JayBoba/posts-graphql/internal/pubsub"
 	"github.com/JayBoba/posts-graphql/internal/service"
 	"github.com/JayBoba/posts-graphql/internal/storage/memory"
 )
@@ -31,9 +33,12 @@ func main() {
 		log.Fatalf("unknown storage %q (expected memory or postgres)", *storageType)
 	}
 
-	svc := service.New(store)
+	svc := service.New(store, pubsub.New())
 
 	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{Svc: svc}}))
+	srv.AddTransport(transport.Websocket{
+		KeepAlivePingInterval: 10 * time.Second,
+	})
 	srv.AddTransport(transport.Options{})
 	srv.AddTransport(transport.GET{})
 	srv.AddTransport(transport.POST{})
