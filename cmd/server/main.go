@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/JayBoba/posts-graphql/internal/pubsub"
 	"github.com/JayBoba/posts-graphql/internal/service"
 	"github.com/JayBoba/posts-graphql/internal/storage/memory"
+	"github.com/JayBoba/posts-graphql/internal/storage/postgres"
 )
 
 func main() {
@@ -29,6 +31,19 @@ func main() {
 	switch *storageType {
 	case "memory":
 		store = memory.New()
+	case "postgres":
+		dsn := os.Getenv("DATABASE_URL")
+		if dsn == "" {
+			log.Fatal("DATABASE_URL is required for postgres storage")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		pg, err := postgres.New(ctx, dsn)
+		cancel()
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer pg.Close()
+		store = pg
 	default:
 		log.Fatalf("unknown storage %q (expected memory or postgres)", *storageType)
 	}
