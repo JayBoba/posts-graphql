@@ -99,6 +99,16 @@ func TestErrorCodes(t *testing.T) {
 			query:    `{ posts(after: "not-a-cursor") { edges { cursor } } }`,
 			wantCode: "BAD_USER_INPUT",
 		},
+		{
+			name:     "malformed id",
+			query:    `{ post(id: "abc") { id } }`,
+			wantCode: "BAD_USER_INPUT",
+		},
+		{
+			name:     "non-positive id",
+			query:    `{ comment(id: 0) { id } }`,
+			wantCode: "BAD_USER_INPUT",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -387,4 +397,21 @@ func TestCommentAdded_Subscription(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("no event received")
 	}
+}
+
+func TestComplexityLimit(t *testing.T) {
+	c, _, _ := newClient(t)
+
+	// A feed with comments and their first replies fits the limit with default page sizes.
+	_, errs := post(t, c, `{ posts { edges { node { id title
+		comments { edges { node { body replies { edges { node { body } } } } } }
+	} } } }`)
+	require.Empty(t, errs)
+
+	// Three levels of replies under a post do not.
+	_, errs = post(t, c, `{ post(id: 1) { comments { edges { node {
+		replies { edges { node { replies { edges { node { replies { edges { node { id } } } } } } } } }
+	} } } } }`)
+	require.Len(t, errs, 1)
+	require.Equal(t, "COMPLEXITY_LIMIT_EXCEEDED", errs[0].Extensions["code"])
 }

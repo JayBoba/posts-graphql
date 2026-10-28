@@ -4093,13 +4093,13 @@ func (ec *executionContext) marshalNCommentEdge2ᚖgithubᚗcomᚋJayBobaᚋpost
 }
 
 func (ec *executionContext) unmarshalNID2int64(ctx context.Context, v any) (int64, error) {
-	res, err := graphql.UnmarshalInt64(v)
+	res, err := model.UnmarshalID(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNID2int64(ctx context.Context, sel ast.SelectionSet, v int64) graphql.Marshaler {
 	_ = sel
-	res := graphql.MarshalInt64(v)
+	res := model.MarshalID(v)
 	if res == graphql.Null {
 		graphql.AddInvalidNullFromMarshaler(ctx, "ID!")
 	}
@@ -4375,7 +4375,7 @@ func (ec *executionContext) unmarshalOID2ᚖint64(ctx context.Context, v any) (*
 	if v == nil {
 		return nil, nil
 	}
-	res, err := graphql.UnmarshalInt64(v)
+	res, err := model.UnmarshalID(v)
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
@@ -4385,7 +4385,7 @@ func (ec *executionContext) marshalOID2ᚖint64(ctx context.Context, sel ast.Sel
 	}
 	_ = sel
 	_ = ctx
-	res := graphql.MarshalInt64(*v)
+	res := model.MarshalID(*v)
 	return res
 }
 

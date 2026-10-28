@@ -4,7 +4,10 @@ import "github.com/JayBoba/posts-graphql/internal/service"
 
 const defaultRepliesPageSize = 10
 
-const ComplexityLimit = 10000
+// ComplexityLimit is calibrated against default page sizes: it lets through
+// a post feed with comments and their first replies (~14 000) and a single
+// post with two levels of replies, but rejects deeper or wider trees.
+const ComplexityLimit = 20000
 
 func paged(def int) func(childComplexity int, first *int32, after *string) int {
 	return func(childComplexity int, first *int32, after *string) int {
