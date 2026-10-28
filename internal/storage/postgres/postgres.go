@@ -44,6 +44,9 @@ func New(ctx context.Context, dsn string) (*Storage, error) {
 
 func (s *Storage) Close() { s.pool.Close() }
 
+// Ping checks that the database is reachable; used by the health check.
+func (s *Storage) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
+
 func (s *Storage) CreatePost(ctx context.Context, p service.Post) (service.Post, error) {
 	row := s.pool.QueryRow(ctx,
 		`INSERT INTO posts (author_id, title, body, comments_enabled)

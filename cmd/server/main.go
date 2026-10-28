@@ -64,6 +64,7 @@ func run() error {
 	mux := http.NewServeMux()
 	mux.Handle("/", playground.Handler("GraphQL playground", "/query"))
 	mux.Handle("/query", graph.NewServer(svc))
+	mux.Handle("GET /healthz", healthHandler(store))
 
 	httpSrv := &http.Server{
 		Addr:              ":" + *port,
