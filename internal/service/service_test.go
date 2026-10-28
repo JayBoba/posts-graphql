@@ -55,6 +55,8 @@ func TestCreatePost_Validation(t *testing.T) {
 	}{
 		{"ok", "alice", "title", "body", nil},
 		{"empty author", " ", "title", "body", domain.ErrInvalidInput},
+		{"100 chars in author is ok", strings.Repeat("я", 100), "title", "body", nil},
+		{"101 chars in author is too long", strings.Repeat("я", 101), "title", "body", domain.ErrInvalidInput},
 		{"empty title", "alice", " \t", "body", domain.ErrInvalidInput},
 		{"empty body", "alice", "title", "\n", domain.ErrInvalidInput},
 		{"300 cyrillic chars in title is ok", "alice", strings.Repeat("я", 300), "body", nil},
@@ -88,6 +90,7 @@ func TestCreateComment_Validation(t *testing.T) {
 	}{
 		{"ok", "bob", "hello", nil},
 		{"empty author", "  ", "hello", domain.ErrInvalidInput},
+		{"101 chars in author is too long", strings.Repeat("я", 101), "hello", domain.ErrInvalidInput},
 		{"empty body", "bob", "", domain.ErrInvalidInput},
 		{"only whitespace", "bob", "  \n\t", domain.ErrInvalidInput},
 		{"2000 cyrillic chars is ok", "bob", strings.Repeat("я", 2000), nil},

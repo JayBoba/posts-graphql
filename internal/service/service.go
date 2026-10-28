@@ -29,6 +29,8 @@ func (s *Service) CreatePost(ctx context.Context, p domain.Post) (domain.Post, e
 	switch {
 	case p.AuthorID == "":
 		return domain.Post{}, fmt.Errorf("%w: authorId is required", domain.ErrInvalidInput)
+	case utf8.RuneCountInString(p.AuthorID) > domain.MaxAuthorIDLength:
+		return domain.Post{}, fmt.Errorf("%w: authorId is longer than %d characters", domain.ErrInvalidInput, domain.MaxAuthorIDLength)
 	case p.Title == "":
 		return domain.Post{}, fmt.Errorf("%w: title is required", domain.ErrInvalidInput)
 	case utf8.RuneCountInString(p.Title) > domain.MaxPostTitleLength:
@@ -74,6 +76,8 @@ func (s *Service) CreateComment(ctx context.Context, c domain.Comment) (domain.C
 	switch {
 	case c.AuthorID == "":
 		return domain.Comment{}, fmt.Errorf("%w: authorId is required", domain.ErrInvalidInput)
+	case utf8.RuneCountInString(c.AuthorID) > domain.MaxAuthorIDLength:
+		return domain.Comment{}, fmt.Errorf("%w: authorId is longer than %d characters", domain.ErrInvalidInput, domain.MaxAuthorIDLength)
 	case strings.TrimSpace(c.Body) == "":
 		return domain.Comment{}, fmt.Errorf("%w: comment is empty", domain.ErrInvalidInput)
 	case utf8.RuneCountInString(c.Body) > domain.MaxCommentLength:

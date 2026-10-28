@@ -7,6 +7,7 @@ import "time"
 
 // Text limits, counted in characters (runes), not bytes.
 const (
+	MaxAuthorIDLength  = 100
 	MaxCommentLength   = 2000
 	MaxPostTitleLength = 300
 	MaxPostBodyLength  = 100_000

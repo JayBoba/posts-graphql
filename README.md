@@ -152,6 +152,8 @@ One business rule deliberately lives in the storages: `CreateComment` checks tha
 
 **Concurrency.** The checks "the post exists, comments are enabled, the parent belongs to the same post" run atomically with the insert: in PostgreSQL as a single `INSERT … SELECT … WHERE EXISTS` statement, in memory under one mutex. The in-memory storage uses an `RWMutex` (reads vastly outnumber writes) and stores values rather than pointers in its maps, so data cannot be modified without holding the lock.
 
+**Graceful shutdown.** On SIGTERM the server stops accepting connections and lets in-flight requests finish; only then are WebSocket subscriptions closed, since `http.Server.Shutdown` does not track hijacked connections.
+
 **Subscriptions.** New comments are published only after they are saved. Each subscriber has a buffered channel and non-blocking sends: a slow client may miss events but never delays others. When a client disconnects, its subscription is removed and its channel is closed, so goroutines do not leak.
 
 **Errors.** The service returns domain errors, and an `ErrorPresenter` maps them in one place to GraphQL errors with `extensions.code`:
@@ -168,7 +170,7 @@ gqlgen wraps every resolver error in a `*gqlerror.Error`, so by the time the pre
 
 `post(id)` and `comment(id)` return `null` when the object does not exist.
 
-**Text limits.** Comments are up to 2000 characters, post titles up to 300 and post bodies up to 100 000. Length is counted in characters (`utf8.RuneCountInString`), not bytes, so Cyrillic text gets the same limit as Latin. The service validates the limits and returns a clear error; `CHECK` constraints in PostgreSQL guard the data even if the service is bypassed.
+**Text limits.** Comments are up to 2000 characters, post titles up to 300, post bodies up to 100 000 and `authorId` up to 100. Length is counted in characters (`utf8.RuneCountInString`), not bytes, so Cyrillic text gets the same limit as Latin. The service validates the limits and returns a clear error; `CHECK` constraints in PostgreSQL guard the data even if the service is bypassed.
 
 **Identifiers.** Post and comment ids are `int64` (`BIGSERIAL`), which lets the id serve as the cursor. In a distributed system they could be replaced with UUIDv7, which is time-ordered and not enumerable. `authorId` is a string because users are external to the service.
 
