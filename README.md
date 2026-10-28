@@ -40,6 +40,13 @@ go test ./...
 docker run --rm -v "$PWD:/app" -w /app golang:1.26 go test -race ./...
 ```
 
+The PostgreSQL storage tests are skipped unless `TEST_DATABASE_URL` is set. They truncate the tables, so use a throwaway database:
+```bash
+docker run -d --rm --name posts-test-pg -p 55432:5432 \
+  -e POSTGRES_USER=posts -e POSTGRES_PASSWORD=posts -e POSTGRES_DB=posts postgres:17-alpine
+TEST_DATABASE_URL="postgres://posts:posts@localhost:55432/posts?sslmode=disable" go test ./internal/storage/postgres
+```
+
 ## Configuration
 
 | Flag | Environment variable | Default | Description |
@@ -159,6 +166,8 @@ gqlgen wraps every resolver error in a `*gqlerror.Error`, so by the time the pre
 - Subscriptions: delivery, isolation between posts, channel closed after disconnect.
 - GraphQL layer, through the same server setup as production: error codes, masking of storage failures, cursor pagination, and the absence of N+1 (a three-level comment tree costs 3 storage calls instead of 16).
 
+- Storage contract tests (`internal/storage/storagetest`): one suite that both the in-memory and the PostgreSQL storage must pass, covering ordering, cursors, per-parent limits in batched reply loading, and every comment rule.
+
 The service is tested against the real in-memory storage with a fake broker.
 
 ## Assumptions
@@ -170,5 +179,5 @@ The service is tested against the real in-memory storage with a fake broker.
 
 - Subscriptions work within a single process. Multiple instances would need PostgreSQL `LISTEN/NOTIFY` or a message broker.
 - A migration tool (e.g. goose) instead of applying the schema on startup.
-- Contract tests shared by both storages (PostgreSQL via testcontainers).
+- Run the PostgreSQL tests via testcontainers, so they need no manual setup.
 - At Habr-level load: caching prebuilt comment trees for popular posts (as Reddit does) and a reply counter on comments.
