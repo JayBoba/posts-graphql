@@ -58,6 +58,8 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull request:
 
 The database schema is applied automatically on startup.
 
+Endpoints: `/` is the GraphQL playground, `/query` is the GraphQL API (HTTP and WebSocket), and `GET /healthz` is the health check. It returns `200 ok`, or `503` when PostgreSQL is unreachable.
+
 ## Example queries
 
 Create a post:
@@ -135,7 +137,7 @@ A request flows `graph → service → storage`. The service depends only on the
 
 **N+1.** The `replies` field is requested for every comment on a level. The first page of replies is loaded through a dataloader: replies for all comments on the level are collected into a single storage call (in PostgreSQL, `unnest` + `LATERAL ... LIMIT`, which reads only the needed index rows for each parent). Loaders are created per GraphQL operation rather than per HTTP request: over WebSocket one connection carries many operations, and a per-connection cache would serve stale data.
 
-**Expensive queries.** A query complexity limit (`10000`): each field costs 1, and a paginated list costs the item cost × `first`. With default page sizes this allows top-level comments plus two levels of replies per query; a query that is too deep or too wide is rejected before execution.
+**Expensive queries.** A query complexity limit (`20000`): each field costs 1, and a paginated list costs the item cost × `first`. With default page sizes it allows a post feed with comments and their first replies, or a single post with top-level comments plus two levels of replies; a query that is too deep or too wide is rejected before execution.
 
 **Concurrency.** The checks "the post exists, comments are enabled, the parent belongs to the same post" run atomically with the insert: in PostgreSQL as a single `INSERT … SELECT … WHERE EXISTS` statement, in memory under one mutex. The in-memory storage uses an `RWMutex` (reads vastly outnumber writes) and stores values rather than pointers in its maps, so data cannot be modified without holding the lock.
 
@@ -145,7 +147,7 @@ A request flows `graph → service → storage`. The service depends only on the
 
 | Case | code |
 |---|---|
-| Invalid input (empty field, text over the limit, invalid cursor, `first < 1`) | `BAD_USER_INPUT` |
+| Invalid input (empty field, text over the limit, malformed or non-positive id, invalid cursor, `first < 1`) | `BAD_USER_INPUT` |
 | Post, comment or parent not found | `NOT_FOUND` |
 | Comments disabled, action by someone other than the author | `FORBIDDEN` |
 | Internal error (e.g. the database is unavailable) | `INTERNAL` (details go to the log only) |
