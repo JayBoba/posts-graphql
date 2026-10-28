@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.15.0
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: posts
+          POSTGRES_PASSWORD: posts
+          POSTGRES_DB: posts
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U posts -d posts"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    env:
+      TEST_DATABASE_URL: postgres://posts:posts@localhost:5432/posts?sslmode=disable
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Check generated GraphQL code is up to date
+        run: |
+          go tool gqlgen generate
+          git diff --exit-code
+
+      - name: Test with the race detector
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+
+      # Generated gqlgen code, test helpers and main would only skew the number.
+      - name: Coverage of hand-written code
+        run: |
+          grep -vE '_gen\.go|generated\.go|/storagetest/|/cmd/' coverage.out > coverage.filtered.out
+          go tool cover -func=coverage.filtered.out | tail -1
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build image
+        run: docker build -t posts-graphql .

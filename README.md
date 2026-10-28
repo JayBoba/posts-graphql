@@ -25,27 +25,28 @@ docker run --rm -p 8080:8080 posts-graphql
 
 **Locally (Go 1.26+):**
 ```bash
-go run ./cmd/server -storage=memory
+make run   # or: go run ./cmd/server -storage=memory
 ```
 
-After changing `internal/graph/schema.graphqls`, regenerate the GraphQL code:
-```bash
-go tool gqlgen generate
-```
+## Development
 
-**Tests:**
+| Command | What it does |
+|---|---|
+| `make test` | Unit tests; the PostgreSQL tests are skipped |
+| `make test-race` | Unit tests with the race detector (requires cgo) |
+| `make test-pg` | Storage contract tests against a throwaway PostgreSQL container on port 55432 |
+| `make lint` / `make fmt` | [golangci-lint](https://golangci-lint.run) v2 checks / formatting (`.golangci.yml`) |
+| `make generate` | Regenerate the GraphQL code after changing `internal/graph/schema.graphqls` |
+| `make up` / `make down` | Start / stop the service with PostgreSQL in docker compose |
+
+The PostgreSQL tests run only when `TEST_DATABASE_URL` is set, and they truncate the tables, so never point it at a database with real data.
+
+Without `make` (e.g. on Windows), the race detector is easiest to run in a container:
 ```bash
-go test ./...
-# with the race detector (requires cgo; easiest in a container):
 docker run --rm -v "$PWD:/app" -w /app golang:1.26 go test -race ./...
 ```
 
-The PostgreSQL storage tests are skipped unless `TEST_DATABASE_URL` is set. They truncate the tables, so use a throwaway database:
-```bash
-docker run -d --rm --name posts-test-pg -p 55432:5432 \
-  -e POSTGRES_USER=posts -e POSTGRES_PASSWORD=posts -e POSTGRES_DB=posts postgres:17-alpine
-TEST_DATABASE_URL="postgres://posts:posts@localhost:55432/posts?sslmode=disable" go test ./internal/storage/postgres
-```
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull request: golangci-lint; a check that the generated GraphQL code matches the schema; all tests with the race detector, including the PostgreSQL tests against a service container; coverage of hand-written code; and a Docker image build.
 
 ## Configuration
 
@@ -144,7 +145,7 @@ A request flows `graph → service → storage`. The service depends only on the
 
 | Case | code |
 |---|---|
-| Invalid input (empty text, > 2000 characters, invalid cursor, `first < 1`) | `BAD_USER_INPUT` |
+| Invalid input (empty field, text over the limit, invalid cursor, `first < 1`) | `BAD_USER_INPUT` |
 | Post, comment or parent not found | `NOT_FOUND` |
 | Comments disabled, action by someone other than the author | `FORBIDDEN` |
 | Internal error (e.g. the database is unavailable) | `INTERNAL` (details go to the log only) |
@@ -152,23 +153,24 @@ A request flows `graph → service → storage`. The service depends only on the
 
 gqlgen wraps every resolver error in a `*gqlerror.Error`, so by the time the presenter runs, a database error looks the same as an argument parsing error. A field middleware therefore marks non-domain resolver errors as internal before they are wrapped. GraphQL parse and validation errors are returned unchanged.
 
-`post(id)` and `comment(id)` return `null` when the object does not exist. Comment length is counted in characters (`utf8.RuneCountInString`), not bytes.
+`post(id)` and `comment(id)` return `null` when the object does not exist.
+
+**Text limits.** Comments are up to 2000 characters, post titles up to 300 and post bodies up to 100 000. Length is counted in characters (`utf8.RuneCountInString`), not bytes, so Cyrillic text gets the same limit as Latin. The service validates the limits and returns a clear error; `CHECK` constraints in PostgreSQL guard the data even if the service is bypassed.
 
 **Identifiers.** Post and comment ids are `int64` (`BIGSERIAL`), which lets the id serve as the cursor. In a distributed system they could be replaced with UUIDv7, which is time-ordered and not enumerable. `authorId` is a string because users are external to the service.
 
 ## Tests
 
-- Validation: empty fields, exactly 2000 and 2001 Cyrillic characters.
+- Validation: empty fields, and every text limit checked at exactly the limit and one character over it, with Cyrillic text.
 - Rules: missing post, disabled comments, parent from another post, settings changed by a non-author.
 - Pagination walks all pages with no gaps or duplicates, and replies never appear among top-level comments.
 - Batched reply loading.
 - 100 concurrent comments get unique ids (`go test -race`).
-- Subscriptions: delivery, isolation between posts, channel closed after disconnect.
-- GraphQL layer, through the same server setup as production: error codes, masking of storage failures, cursor pagination, and the absence of N+1 (a three-level comment tree costs 3 storage calls instead of 16).
-
+- Pub/sub: delivery, isolation between posts, channel closed after disconnect.
+- GraphQL layer, through the same server setup as production: mutations, post and reply pagination, `comment(id)` threads, a WebSocket subscription end to end, error codes, masking of storage failures, and the absence of N+1 (a three-level comment tree costs 3 storage calls instead of 16).
 - Storage contract tests (`internal/storage/storagetest`): one suite that both the in-memory and the PostgreSQL storage must pass, covering ordering, cursors, per-parent limits in batched reply loading, and every comment rule.
 
-The service is tested against the real in-memory storage with a fake broker.
+The service is tested against the real in-memory storage with a fake broker. Coverage of hand-written code is about 89%, not counting generated code.
 
 ## Assumptions
 
