@@ -29,8 +29,12 @@ func (s *Service) CreatePost(ctx context.Context, p Post) (Post, error) {
 		return Post{}, fmt.Errorf("%w: authorId is required", ErrInvalidInput)
 	case p.Title == "":
 		return Post{}, fmt.Errorf("%w: title is required", ErrInvalidInput)
+	case utf8.RuneCountInString(p.Title) > MaxPostTitleLength:
+		return Post{}, fmt.Errorf("%w: title is longer than %d characters", ErrInvalidInput, MaxPostTitleLength)
 	case strings.TrimSpace(p.Body) == "":
 		return Post{}, fmt.Errorf("%w: body is required", ErrInvalidInput)
+	case utf8.RuneCountInString(p.Body) > MaxPostBodyLength:
+		return Post{}, fmt.Errorf("%w: body is longer than %d characters", ErrInvalidInput, MaxPostBodyLength)
 	}
 	return s.storage.CreatePost(ctx, p)
 }

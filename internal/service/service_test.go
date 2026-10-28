@@ -42,6 +42,39 @@ func createPost(t *testing.T, svc *service.Service, author string, enabled bool)
 
 func ptr[T any](v T) *T { return &v }
 
+func TestCreatePost_Validation(t *testing.T) {
+	svc, _ := newService(t)
+
+	tests := []struct {
+		name    string
+		author  string
+		title   string
+		body    string
+		wantErr error
+	}{
+		{"ok", "alice", "title", "body", nil},
+		{"empty author", " ", "title", "body", service.ErrInvalidInput},
+		{"empty title", "alice", " \t", "body", service.ErrInvalidInput},
+		{"empty body", "alice", "title", "\n", service.ErrInvalidInput},
+		{"300 cyrillic chars in title is ok", "alice", strings.Repeat("я", 300), "body", nil},
+		{"301 chars in title is too long", "alice", strings.Repeat("я", 301), "body", service.ErrInvalidInput},
+		{"100000 chars in body is ok", "alice", "title", strings.Repeat("я", 100_000), nil},
+		{"100001 chars in body is too long", "alice", "title", strings.Repeat("я", 100_001), service.ErrInvalidInput},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := svc.CreatePost(context.Background(), service.Post{
+				AuthorID: tt.author, Title: tt.title, Body: tt.body,
+			})
+			if tt.wantErr == nil {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestCreateComment_Validation(t *testing.T) {
 	svc, _ := newService(t)
 	post := createPost(t, svc, "author", true)

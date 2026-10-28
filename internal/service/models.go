@@ -2,7 +2,12 @@ package service
 
 import "time"
 
-const MaxCommentLength = 2000
+// Text limits, counted in characters (runes), not bytes.
+const (
+	MaxCommentLength   = 2000
+	MaxPostTitleLength = 300
+	MaxPostBodyLength  = 100_000
+)
 
 type Post struct {
 	ID              int64
