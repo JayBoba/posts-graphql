@@ -56,7 +56,8 @@ func (s *Service) SetCommentsEnabled(ctx context.Context, postID int64, authorID
 	if err != nil {
 		return Post{}, err
 	}
-	if post.AuthorID != authorID {
+	// authorId is trimmed on creation, so it is compared the same way here.
+	if post.AuthorID != strings.TrimSpace(authorID) {
 		return Post{}, ErrForbidden
 	}
 	return s.storage.SetCommentsEnabled(ctx, postID, enabled)

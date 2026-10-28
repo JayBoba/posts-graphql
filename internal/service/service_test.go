@@ -124,6 +124,14 @@ func TestSetCommentsEnabled(t *testing.T) {
 
 	_, err = svc.CreateComment(ctx, service.Comment{PostID: post.ID, AuthorID: "bob", Body: "hi"})
 	require.ErrorIs(t, err, service.ErrCommentsDisabled)
+
+	// The author is matched after trimming, just like on creation.
+	updated, err = svc.SetCommentsEnabled(ctx, post.ID, "  author ", true)
+	require.NoError(t, err)
+	require.True(t, updated.CommentsEnabled)
+
+	_, err = svc.SetCommentsEnabled(ctx, 999, "author", true)
+	require.ErrorIs(t, err, service.ErrPostNotFound)
 }
 
 func TestListComments_Pagination(t *testing.T) {
