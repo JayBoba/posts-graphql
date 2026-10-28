@@ -12,6 +12,7 @@ import (
 	"github.com/JayBoba/posts-graphql/internal/service"
 )
 
+//go:embed schema.sql
 var schema string
 
 const (

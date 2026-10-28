@@ -2,18 +2,18 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/99designs/gqlgen/graphql/handler"
-	"github.com/99designs/gqlgen/graphql/handler/extension"
-	"github.com/99designs/gqlgen/graphql/handler/lru"
-	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
-	"github.com/vektah/gqlparser/v2/ast"
 
 	"github.com/JayBoba/posts-graphql/internal/graph"
 	"github.com/JayBoba/posts-graphql/internal/pubsub"
@@ -23,9 +23,20 @@ import (
 )
 
 func main() {
-	storageType := flag.String("storage", envOr("STORAGE", "memory"), "хранилище: memory или postgres")
-	port := flag.String("port", envOr("PORT", "8080"), "порт HTTP-сервера")
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// run is separate from main so that deferred calls (closing the DB pool) run:
+// log.Fatal exits the process without running them.
+func run() error {
+	storageType := flag.String("storage", envOr("STORAGE", "memory"), "storage backend: memory or postgres")
+	port := flag.String("port", envOr("PORT", "8080"), "HTTP server port")
 	flag.Parse()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	var store service.Storage
 	switch *storageType {
@@ -34,39 +45,50 @@ func main() {
 	case "postgres":
 		dsn := os.Getenv("DATABASE_URL")
 		if dsn == "" {
-			log.Fatal("DATABASE_URL is required for postgres storage")
+			return errors.New("DATABASE_URL is required for postgres storage")
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		pg, err := postgres.New(ctx, dsn)
+		connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		pg, err := postgres.New(connectCtx, dsn)
 		cancel()
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		defer pg.Close()
 		store = pg
 	default:
-		log.Fatalf("unknown storage %q (expected memory or postgres)", *storageType)
+		return fmt.Errorf("unknown storage %q (expected memory or postgres)", *storageType)
 	}
 
 	svc := service.New(store, pubsub.New())
 
-	srv := handler.New(graph.NewExecutableSchema(graph.NewConfig(svc)))
-	srv.Use(extension.FixedComplexityLimit(graph.ComplexityLimit))
-	srv.AddTransport(transport.Websocket{
-		KeepAlivePingInterval: 10 * time.Second,
-	})
-	srv.AddTransport(transport.Options{})
-	srv.AddTransport(transport.GET{})
-	srv.AddTransport(transport.POST{})
-	srv.SetQueryCache(lru.New[*ast.QueryDocument](1000))
-	srv.Use(extension.Introspection{})
-	srv.SetErrorPresenter(graph.ErrorPresenter)
+	mux := http.NewServeMux()
+	mux.Handle("/", playground.Handler("GraphQL playground", "/query"))
+	mux.Handle("/query", graph.NewServer(svc))
 
-	http.Handle("/", playground.Handler("GraphQL playground", "/query"))
-	http.Handle("/query", graph.LoadersMiddleware(svc, srv))
+	httpSrv := &http.Server{
+		Addr:              ":" + *port,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		// No WriteTimeout: subscriptions keep the WebSocket open.
+		BaseContext: func(net.Listener) context.Context { return ctx },
+	}
 
-	log.Printf("storage=%s, playground: http://localhost:%s/", *storageType, *port)
-	log.Fatal(http.ListenAndServe(":"+*port, nil))
+	errCh := make(chan error, 1)
+	go func() {
+		log.Printf("storage=%s, playground: http://localhost:%s/", *storageType, *port)
+		errCh <- httpSrv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+	}
+
+	log.Print("shutting down")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return httpSrv.Shutdown(shutdownCtx)
 }
 
 func envOr(key, def string) string {

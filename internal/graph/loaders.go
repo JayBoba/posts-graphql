@@ -2,9 +2,9 @@ package graph
 
 import (
 	"context"
-	"net/http"
 	"time"
 
+	"github.com/99designs/gqlgen/graphql"
 	"github.com/vikstrous/dataloadgen"
 
 	"github.com/JayBoba/posts-graphql/internal/service"
@@ -21,8 +21,12 @@ type loaders struct {
 
 type loadersCtxKey struct{}
 
-func LoadersMiddleware(svc *service.Service, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// WithLoaders is an operation middleware that gives every GraphQL operation its
+// own set of dataloaders with its own cache. An HTTP middleware would not work:
+// over WebSocket one connection carries many operations, so the cache would live
+// as long as the socket and serve stale data.
+func WithLoaders(svc *service.Service) graphql.OperationMiddleware {
+	return func(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
 		l := &loaders{
 			replies: dataloadgen.NewLoader(
 				func(ctx context.Context, keys []repliesKey) ([]service.Page[service.Comment], []error) {
@@ -31,9 +35,8 @@ func LoadersMiddleware(svc *service.Service, next http.Handler) http.Handler {
 				dataloadgen.WithWait(time.Millisecond),
 			),
 		}
-		ctx := context.WithValue(r.Context(), loadersCtxKey{}, l)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+		return next(context.WithValue(ctx, loadersCtxKey{}, l))
+	}
 }
 
 func loadersFrom(ctx context.Context) *loaders {
