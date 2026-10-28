@@ -7,9 +7,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/JayBoba/posts-graphql/internal/domain"
 	"github.com/JayBoba/posts-graphql/internal/pubsub"
 	"github.com/JayBoba/posts-graphql/internal/service"
 )
+
+// Hub implements the service's Broker interface. The check lives in the test,
+// so the pubsub package itself does not depend on the service.
+var _ service.Broker = (*pubsub.Hub)(nil)
 
 func TestHub(t *testing.T) {
 	hub := pubsub.New()
@@ -19,7 +24,7 @@ func TestHub(t *testing.T) {
 	ch := hub.Subscribe(ctx, 1)
 	otherPost := hub.Subscribe(ctx, 2)
 
-	hub.Publish(service.Comment{ID: 10, PostID: 1})
+	hub.Publish(domain.Comment{ID: 10, PostID: 1})
 
 	select {
 	case c := <-ch:

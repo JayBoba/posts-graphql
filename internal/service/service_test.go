@@ -8,22 +8,23 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/JayBoba/posts-graphql/internal/domain"
 	"github.com/JayBoba/posts-graphql/internal/service"
 	"github.com/JayBoba/posts-graphql/internal/storage/memory"
 )
 
 type fakeBroker struct {
 	mu        sync.Mutex
-	published []service.Comment
+	published []domain.Comment
 }
 
-func (b *fakeBroker) Publish(c service.Comment) {
+func (b *fakeBroker) Publish(c domain.Comment) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.published = append(b.published, c)
 }
 
-func (b *fakeBroker) Subscribe(context.Context, int64) <-chan *service.Comment { return nil }
+func (b *fakeBroker) Subscribe(context.Context, int64) <-chan *domain.Comment { return nil }
 
 func newService(t *testing.T) (*service.Service, *fakeBroker) {
 	t.Helper()
@@ -31,9 +32,9 @@ func newService(t *testing.T) (*service.Service, *fakeBroker) {
 	return service.New(memory.New(), b), b
 }
 
-func createPost(t *testing.T, svc *service.Service, author string, enabled bool) service.Post {
+func createPost(t *testing.T, svc *service.Service, author string, enabled bool) domain.Post {
 	t.Helper()
-	p, err := svc.CreatePost(context.Background(), service.Post{
+	p, err := svc.CreatePost(context.Background(), domain.Post{
 		AuthorID: author, Title: "title", Body: "body", CommentsEnabled: enabled,
 	})
 	require.NoError(t, err)
@@ -53,17 +54,17 @@ func TestCreatePost_Validation(t *testing.T) {
 		wantErr error
 	}{
 		{"ok", "alice", "title", "body", nil},
-		{"empty author", " ", "title", "body", service.ErrInvalidInput},
-		{"empty title", "alice", " \t", "body", service.ErrInvalidInput},
-		{"empty body", "alice", "title", "\n", service.ErrInvalidInput},
+		{"empty author", " ", "title", "body", domain.ErrInvalidInput},
+		{"empty title", "alice", " \t", "body", domain.ErrInvalidInput},
+		{"empty body", "alice", "title", "\n", domain.ErrInvalidInput},
 		{"300 cyrillic chars in title is ok", "alice", strings.Repeat("я", 300), "body", nil},
-		{"301 chars in title is too long", "alice", strings.Repeat("я", 301), "body", service.ErrInvalidInput},
+		{"301 chars in title is too long", "alice", strings.Repeat("я", 301), "body", domain.ErrInvalidInput},
 		{"100000 chars in body is ok", "alice", "title", strings.Repeat("я", 100_000), nil},
-		{"100001 chars in body is too long", "alice", "title", strings.Repeat("я", 100_001), service.ErrInvalidInput},
+		{"100001 chars in body is too long", "alice", "title", strings.Repeat("я", 100_001), domain.ErrInvalidInput},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := svc.CreatePost(context.Background(), service.Post{
+			_, err := svc.CreatePost(context.Background(), domain.Post{
 				AuthorID: tt.author, Title: tt.title, Body: tt.body,
 			})
 			if tt.wantErr == nil {
@@ -86,15 +87,15 @@ func TestCreateComment_Validation(t *testing.T) {
 		wantErr error
 	}{
 		{"ok", "bob", "hello", nil},
-		{"empty author", "  ", "hello", service.ErrInvalidInput},
-		{"empty body", "bob", "", service.ErrInvalidInput},
-		{"only whitespace", "bob", "  \n\t", service.ErrInvalidInput},
+		{"empty author", "  ", "hello", domain.ErrInvalidInput},
+		{"empty body", "bob", "", domain.ErrInvalidInput},
+		{"only whitespace", "bob", "  \n\t", domain.ErrInvalidInput},
 		{"2000 cyrillic chars is ok", "bob", strings.Repeat("я", 2000), nil},
-		{"2001 chars is too long", "bob", strings.Repeat("я", 2001), service.ErrInvalidInput},
+		{"2001 chars is too long", "bob", strings.Repeat("я", 2001), domain.ErrInvalidInput},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := svc.CreateComment(context.Background(), service.Comment{
+			_, err := svc.CreateComment(context.Background(), domain.Comment{
 				PostID: post.ID, AuthorID: tt.author, Body: tt.body,
 			})
 			if tt.wantErr == nil {
@@ -113,7 +114,7 @@ func TestCreateComment_Rules(t *testing.T) {
 	closed := createPost(t, svc, "author", false)
 	other := createPost(t, svc, "author", true)
 
-	root, err := svc.CreateComment(ctx, service.Comment{PostID: open.ID, AuthorID: "bob", Body: "root"})
+	root, err := svc.CreateComment(ctx, domain.Comment{PostID: open.ID, AuthorID: "bob", Body: "root"})
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -123,14 +124,14 @@ func TestCreateComment_Rules(t *testing.T) {
 		wantErr  error
 	}{
 		{"reply to existing comment", open.ID, ptr(root.ID), nil},
-		{"post not found", 999, nil, service.ErrPostNotFound},
-		{"comments disabled", closed.ID, nil, service.ErrCommentsDisabled},
-		{"parent not found", open.ID, ptr(int64(999)), service.ErrParentNotFound},
-		{"parent from another post", other.ID, ptr(root.ID), service.ErrParentNotFound},
+		{"post not found", 999, nil, domain.ErrPostNotFound},
+		{"comments disabled", closed.ID, nil, domain.ErrCommentsDisabled},
+		{"parent not found", open.ID, ptr(int64(999)), domain.ErrParentNotFound},
+		{"parent from another post", other.ID, ptr(root.ID), domain.ErrParentNotFound},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := svc.CreateComment(ctx, service.Comment{
+			_, err := svc.CreateComment(ctx, domain.Comment{
 				PostID: tt.postID, ParentID: tt.parentID, AuthorID: "bob", Body: "text",
 			})
 			if tt.wantErr == nil {
@@ -149,14 +150,14 @@ func TestSetCommentsEnabled(t *testing.T) {
 	post := createPost(t, svc, "author", true)
 
 	_, err := svc.SetCommentsEnabled(ctx, post.ID, "stranger", false)
-	require.ErrorIs(t, err, service.ErrForbidden)
+	require.ErrorIs(t, err, domain.ErrForbidden)
 
 	updated, err := svc.SetCommentsEnabled(ctx, post.ID, "author", false)
 	require.NoError(t, err)
 	require.False(t, updated.CommentsEnabled)
 
-	_, err = svc.CreateComment(ctx, service.Comment{PostID: post.ID, AuthorID: "bob", Body: "hi"})
-	require.ErrorIs(t, err, service.ErrCommentsDisabled)
+	_, err = svc.CreateComment(ctx, domain.Comment{PostID: post.ID, AuthorID: "bob", Body: "hi"})
+	require.ErrorIs(t, err, domain.ErrCommentsDisabled)
 
 	// The author is matched after trimming, just like on creation.
 	updated, err = svc.SetCommentsEnabled(ctx, post.ID, "  author ", true)
@@ -164,7 +165,7 @@ func TestSetCommentsEnabled(t *testing.T) {
 	require.True(t, updated.CommentsEnabled)
 
 	_, err = svc.SetCommentsEnabled(ctx, 999, "author", true)
-	require.ErrorIs(t, err, service.ErrPostNotFound)
+	require.ErrorIs(t, err, domain.ErrPostNotFound)
 }
 
 func TestListComments_Pagination(t *testing.T) {
@@ -174,11 +175,11 @@ func TestListComments_Pagination(t *testing.T) {
 
 	var rootIDs []int64
 	for range 5 {
-		c, err := svc.CreateComment(ctx, service.Comment{PostID: post.ID, AuthorID: "bob", Body: "root"})
+		c, err := svc.CreateComment(ctx, domain.Comment{PostID: post.ID, AuthorID: "bob", Body: "root"})
 		require.NoError(t, err)
 		rootIDs = append(rootIDs, c.ID)
 	}
-	_, err := svc.CreateComment(ctx, service.Comment{
+	_, err := svc.CreateComment(ctx, domain.Comment{
 		PostID: post.ID, ParentID: ptr(rootIDs[0]), AuthorID: "bob", Body: "reply",
 	})
 	require.NoError(t, err)
@@ -198,7 +199,7 @@ func TestListComments_Pagination(t *testing.T) {
 	require.Equal(t, rootIDs, got)
 
 	_, err = svc.ListComments(ctx, post.ID, nil, nil, 0)
-	require.ErrorIs(t, err, service.ErrInvalidInput)
+	require.ErrorIs(t, err, domain.ErrInvalidInput)
 }
 func TestCreateComment_Concurrent(t *testing.T) {
 	ctx := context.Background()
@@ -212,7 +213,7 @@ func TestCreateComment_Concurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			c, err := svc.CreateComment(ctx, service.Comment{PostID: post.ID, AuthorID: "bob", Body: "hi"})
+			c, err := svc.CreateComment(ctx, domain.Comment{PostID: post.ID, AuthorID: "bob", Body: "hi"})
 			if err == nil {
 				ids <- c.ID
 			}
@@ -234,8 +235,8 @@ func TestListRepliesBatch(t *testing.T) {
 	svc, _ := newService(t)
 	post := createPost(t, svc, "author", true)
 
-	newComment := func(parentID *int64) service.Comment {
-		c, err := svc.CreateComment(ctx, service.Comment{PostID: post.ID, ParentID: parentID, AuthorID: "bob", Body: "text"})
+	newComment := func(parentID *int64) domain.Comment {
+		c, err := svc.CreateComment(ctx, domain.Comment{PostID: post.ID, ParentID: parentID, AuthorID: "bob", Body: "text"})
 		require.NoError(t, err)
 		return c
 	}

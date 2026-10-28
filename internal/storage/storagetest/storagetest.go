@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/JayBoba/posts-graphql/internal/domain"
 	"github.com/JayBoba/posts-graphql/internal/service"
 )
 
@@ -34,18 +35,18 @@ func Run(t *testing.T, newStorage func(t *testing.T) service.Storage) {
 	}
 }
 
-func createPost(t *testing.T, s service.Storage, enabled bool) service.Post {
+func createPost(t *testing.T, s service.Storage, enabled bool) domain.Post {
 	t.Helper()
-	p, err := s.CreatePost(context.Background(), service.Post{
+	p, err := s.CreatePost(context.Background(), domain.Post{
 		AuthorID: "author", Title: "title", Body: "body", CommentsEnabled: enabled,
 	})
 	require.NoError(t, err)
 	return p
 }
 
-func createComment(t *testing.T, s service.Storage, postID int64, parentID *int64) service.Comment {
+func createComment(t *testing.T, s service.Storage, postID int64, parentID *int64) domain.Comment {
 	t.Helper()
-	c, err := s.CreateComment(context.Background(), service.Comment{
+	c, err := s.CreateComment(context.Background(), domain.Comment{
 		PostID: postID, ParentID: parentID, AuthorID: "bob", Body: "text",
 	})
 	require.NoError(t, err)
@@ -60,8 +61,8 @@ func ids[T any](items []T, id func(T) int64) []int64 {
 	return res
 }
 
-func postID(p service.Post) int64       { return p.ID }
-func commentID(c service.Comment) int64 { return c.ID }
+func postID(p domain.Post) int64       { return p.ID }
+func commentID(c domain.Comment) int64 { return c.ID }
 
 func testCreateAndGetPost(t *testing.T, s service.Storage) {
 	ctx := context.Background()
@@ -78,7 +79,7 @@ func testCreateAndGetPost(t *testing.T, s service.Storage) {
 	require.True(t, got.CommentsEnabled)
 
 	_, err = s.GetPost(ctx, created.ID+1000)
-	require.ErrorIs(t, err, service.ErrPostNotFound)
+	require.ErrorIs(t, err, domain.ErrPostNotFound)
 }
 
 func testListPosts(t *testing.T, s service.Storage) {
@@ -116,7 +117,7 @@ func testSetCommentsEnabled(t *testing.T, s service.Storage) {
 	require.False(t, got.CommentsEnabled)
 
 	_, err = s.SetCommentsEnabled(ctx, p.ID+1000, true)
-	require.ErrorIs(t, err, service.ErrPostNotFound)
+	require.ErrorIs(t, err, domain.ErrPostNotFound)
 }
 
 func testCreateCommentRules(t *testing.T, s service.Storage) {
@@ -135,14 +136,14 @@ func testCreateCommentRules(t *testing.T, s service.Storage) {
 	}{
 		{"top-level comment", open.ID, nil, nil},
 		{"reply", open.ID, &root.ID, nil},
-		{"post not found", open.ID + 1000, nil, service.ErrPostNotFound},
-		{"comments disabled", closed.ID, nil, service.ErrCommentsDisabled},
-		{"parent not found", open.ID, &missing, service.ErrParentNotFound},
-		{"parent from another post", other.ID, &root.ID, service.ErrParentNotFound},
+		{"post not found", open.ID + 1000, nil, domain.ErrPostNotFound},
+		{"comments disabled", closed.ID, nil, domain.ErrCommentsDisabled},
+		{"parent not found", open.ID, &missing, domain.ErrParentNotFound},
+		{"parent from another post", other.ID, &root.ID, domain.ErrParentNotFound},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c, err := s.CreateComment(ctx, service.Comment{
+			c, err := s.CreateComment(ctx, domain.Comment{
 				PostID: tt.postID, ParentID: tt.parentID, AuthorID: "bob", Body: "text",
 			})
 			if tt.wantErr != nil {
@@ -212,7 +213,7 @@ func testGetComment(t *testing.T, s service.Storage) {
 	require.Equal(t, "text", got.Body)
 
 	_, err = s.GetComment(ctx, reply.ID+1000)
-	require.ErrorIs(t, err, service.ErrCommentNotFound)
+	require.ErrorIs(t, err, domain.ErrCommentNotFound)
 }
 
 func testListRepliesBatch(t *testing.T, s service.Storage) {

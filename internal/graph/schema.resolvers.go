@@ -9,12 +9,13 @@ import (
 	"context"
 	"errors"
 
+	"github.com/JayBoba/posts-graphql/internal/domain"
 	"github.com/JayBoba/posts-graphql/internal/graph/model"
 	"github.com/JayBoba/posts-graphql/internal/service"
 )
 
 // Replies is the resolver for the replies field.
-func (r *commentResolver) Replies(ctx context.Context, obj *service.Comment, first *int32, after *string) (*model.CommentConnection, error) {
+func (r *commentResolver) Replies(ctx context.Context, obj *domain.Comment, first *int32, after *string) (*model.CommentConnection, error) {
 	n := pageSize(first, defaultRepliesPageSize)
 
 	if l := loadersFrom(ctx); l != nil && after == nil {
@@ -37,12 +38,12 @@ func (r *commentResolver) Replies(ctx context.Context, obj *service.Comment, fir
 }
 
 // CreatePost is the resolver for the createPost field.
-func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) (*service.Post, error) {
+func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) (*domain.Post, error) {
 	enabled := true
 	if input.CommentsEnabled != nil {
 		enabled = *input.CommentsEnabled
 	}
-	post, err := r.Svc.CreatePost(ctx, service.Post{
+	post, err := r.Svc.CreatePost(ctx, domain.Post{
 		AuthorID:        input.AuthorID,
 		Title:           input.Title,
 		Body:            input.Body,
@@ -55,8 +56,8 @@ func (r *mutationResolver) CreatePost(ctx context.Context, input model.NewPost) 
 }
 
 // CreateComment is the resolver for the createComment field.
-func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewComment) (*service.Comment, error) {
-	c, err := r.Svc.CreateComment(ctx, service.Comment{
+func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewComment) (*domain.Comment, error) {
+	c, err := r.Svc.CreateComment(ctx, domain.Comment{
 		PostID:   input.PostID,
 		ParentID: input.ParentID,
 		AuthorID: input.AuthorID,
@@ -69,7 +70,7 @@ func (r *mutationResolver) CreateComment(ctx context.Context, input model.NewCom
 }
 
 // SetCommentsEnabled is the resolver for the setCommentsEnabled field.
-func (r *mutationResolver) SetCommentsEnabled(ctx context.Context, postID int64, authorID string, enabled bool) (*service.Post, error) {
+func (r *mutationResolver) SetCommentsEnabled(ctx context.Context, postID int64, authorID string, enabled bool) (*domain.Post, error) {
 	post, err := r.Svc.SetCommentsEnabled(ctx, postID, authorID, enabled)
 	if err != nil {
 		return nil, err
@@ -78,7 +79,7 @@ func (r *mutationResolver) SetCommentsEnabled(ctx context.Context, postID int64,
 }
 
 // Comments is the resolver for the comments field.
-func (r *postResolver) Comments(ctx context.Context, obj *service.Post, first *int32, after *string) (*model.CommentConnection, error) {
+func (r *postResolver) Comments(ctx context.Context, obj *domain.Post, first *int32, after *string) (*model.CommentConnection, error) {
 	afterID, err := decodeCursor(after)
 	if err != nil {
 		return nil, err
@@ -104,9 +105,9 @@ func (r *queryResolver) Posts(ctx context.Context, first *int32, after *string) 
 }
 
 // Post is the resolver for the post field.
-func (r *queryResolver) Post(ctx context.Context, id int64) (*service.Post, error) {
+func (r *queryResolver) Post(ctx context.Context, id int64) (*domain.Post, error) {
 	post, err := r.Svc.GetPost(ctx, id)
-	if errors.Is(err, service.ErrPostNotFound) {
+	if errors.Is(err, domain.ErrPostNotFound) {
 		return nil, nil
 	}
 	if err != nil {
@@ -116,9 +117,9 @@ func (r *queryResolver) Post(ctx context.Context, id int64) (*service.Post, erro
 }
 
 // Comment is the resolver for the comment field.
-func (r *queryResolver) Comment(ctx context.Context, id int64) (*service.Comment, error) {
+func (r *queryResolver) Comment(ctx context.Context, id int64) (*domain.Comment, error) {
 	c, err := r.Svc.GetComment(ctx, id)
-	if errors.Is(err, service.ErrCommentNotFound) {
+	if errors.Is(err, domain.ErrCommentNotFound) {
 		return nil, nil
 	}
 	if err != nil {
@@ -128,7 +129,7 @@ func (r *queryResolver) Comment(ctx context.Context, id int64) (*service.Comment
 }
 
 // CommentAdded is the resolver for the commentAdded field.
-func (r *subscriptionResolver) CommentAdded(ctx context.Context, postID int64) (<-chan *service.Comment, error) {
+func (r *subscriptionResolver) CommentAdded(ctx context.Context, postID int64) (<-chan *domain.Comment, error) {
 	return r.Svc.SubscribeComments(ctx, postID)
 }
 

@@ -8,7 +8,7 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 
-	"github.com/JayBoba/posts-graphql/internal/service"
+	"github.com/JayBoba/posts-graphql/internal/domain"
 )
 
 // internalError marks a technical resolver error (e.g. from the database)
@@ -59,12 +59,12 @@ func ErrorPresenter(ctx context.Context, err error) *gqlerror.Error {
 // errorCode returns the code for the service's domain errors and "" for any other error.
 func errorCode(err error) string {
 	switch {
-	case errors.Is(err, service.ErrInvalidInput):
+	case errors.Is(err, domain.ErrInvalidInput):
 		return "BAD_USER_INPUT"
-	case errors.Is(err, service.ErrPostNotFound), errors.Is(err, service.ErrParentNotFound),
-		errors.Is(err, service.ErrCommentNotFound):
+	case errors.Is(err, domain.ErrPostNotFound), errors.Is(err, domain.ErrParentNotFound),
+		errors.Is(err, domain.ErrCommentNotFound):
 		return "NOT_FOUND"
-	case errors.Is(err, service.ErrCommentsDisabled), errors.Is(err, service.ErrForbidden):
+	case errors.Is(err, domain.ErrCommentsDisabled), errors.Is(err, domain.ErrForbidden):
 		return "FORBIDDEN"
 	default:
 		return ""

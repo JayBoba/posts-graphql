@@ -1,4 +1,7 @@
-package service
+// Package domain holds the entities, their limits and the domain errors shared
+// by the service, the storages and the GraphQL layer. It depends on nothing else
+// in the project.
+package domain
 
 import "time"
 

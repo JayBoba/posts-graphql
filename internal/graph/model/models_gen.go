@@ -3,7 +3,7 @@
 package model
 
 import (
-	"github.com/JayBoba/posts-graphql/internal/service"
+	"github.com/JayBoba/posts-graphql/internal/domain"
 )
 
 type CommentConnection struct {
@@ -12,8 +12,8 @@ type CommentConnection struct {
 }
 
 type CommentEdge struct {
-	Cursor string           `json:"cursor"`
-	Node   *service.Comment `json:"node"`
+	Cursor string          `json:"cursor"`
+	Node   *domain.Comment `json:"node"`
 }
 
 type Mutation struct {
@@ -44,8 +44,8 @@ type PostConnection struct {
 }
 
 type PostEdge struct {
-	Cursor string        `json:"cursor"`
-	Node   *service.Post `json:"node"`
+	Cursor string       `json:"cursor"`
+	Node   *domain.Post `json:"node"`
 }
 
 type Query struct {

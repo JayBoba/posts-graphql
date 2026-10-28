@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/JayBoba/posts-graphql/internal/service"
+	"github.com/JayBoba/posts-graphql/internal/domain"
 )
 
 type childKey struct {
@@ -20,24 +20,22 @@ type Storage struct {
 	lastPostID    int64
 	lastCommentID int64
 
-	posts   map[int64]service.Post
+	posts   map[int64]domain.Post
 	postIDs []int64
 
-	comments map[int64]service.Comment
+	comments map[int64]domain.Comment
 	children map[childKey][]int64
 }
 
 func New() *Storage {
 	return &Storage{
-		posts:    make(map[int64]service.Post),
-		comments: make(map[int64]service.Comment),
+		posts:    make(map[int64]domain.Post),
+		comments: make(map[int64]domain.Comment),
 		children: make(map[childKey][]int64),
 	}
 }
 
-var _ service.Storage = (*Storage)(nil)
-
-func (s *Storage) CreatePost(_ context.Context, p service.Post) (service.Post, error) {
+func (s *Storage) CreatePost(_ context.Context, p domain.Post) (domain.Post, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -49,18 +47,18 @@ func (s *Storage) CreatePost(_ context.Context, p service.Post) (service.Post, e
 	return p, nil
 }
 
-func (s *Storage) GetPost(_ context.Context, id int64) (service.Post, error) {
+func (s *Storage) GetPost(_ context.Context, id int64) (domain.Post, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	p, ok := s.posts[id]
 	if !ok {
-		return service.Post{}, service.ErrPostNotFound
+		return domain.Post{}, domain.ErrPostNotFound
 	}
 	return p, nil
 }
 
-func (s *Storage) ListPosts(_ context.Context, after *int64, limit int) ([]service.Post, error) {
+func (s *Storage) ListPosts(_ context.Context, after *int64, limit int) ([]domain.Post, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	end := len(s.postIDs)
@@ -68,42 +66,42 @@ func (s *Storage) ListPosts(_ context.Context, after *int64, limit int) ([]servi
 		end = sort.Search(len(s.postIDs), func(i int) bool { return s.postIDs[i] >= *after })
 	}
 
-	res := make([]service.Post, 0, min(limit, end))
+	res := make([]domain.Post, 0, min(limit, end))
 	for i := end - 1; i >= 0 && len(res) < limit; i-- {
 		res = append(res, s.posts[s.postIDs[i]])
 	}
 	return res, nil
 }
 
-func (s *Storage) SetCommentsEnabled(_ context.Context, postID int64, enabled bool) (service.Post, error) {
+func (s *Storage) SetCommentsEnabled(_ context.Context, postID int64, enabled bool) (domain.Post, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	p, ok := s.posts[postID]
 	if !ok {
-		return service.Post{}, service.ErrPostNotFound
+		return domain.Post{}, domain.ErrPostNotFound
 	}
 	p.CommentsEnabled = enabled
 	s.posts[postID] = p
 	return p, nil
 }
 
-func (s *Storage) CreateComment(_ context.Context, c service.Comment) (service.Comment, error) {
+func (s *Storage) CreateComment(_ context.Context, c domain.Comment) (domain.Comment, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	post, ok := s.posts[c.PostID]
 	if !ok {
-		return service.Comment{}, service.ErrPostNotFound
+		return domain.Comment{}, domain.ErrPostNotFound
 	}
 	if !post.CommentsEnabled {
-		return service.Comment{}, service.ErrCommentsDisabled
+		return domain.Comment{}, domain.ErrCommentsDisabled
 	}
 
 	key := childKey{postID: c.PostID}
 	if c.ParentID != nil {
 		parent, ok := s.comments[*c.ParentID]
 		if !ok || parent.PostID != c.PostID {
-			return service.Comment{}, service.ErrParentNotFound
+			return domain.Comment{}, domain.ErrParentNotFound
 		}
 		key.parentID = parent.ID
 	}
@@ -116,7 +114,7 @@ func (s *Storage) CreateComment(_ context.Context, c service.Comment) (service.C
 	return c, nil
 }
 
-func (s *Storage) ListComments(_ context.Context, postID int64, parentID *int64, after *int64, limit int) ([]service.Comment, error) {
+func (s *Storage) ListComments(_ context.Context, postID int64, parentID *int64, after *int64, limit int) ([]domain.Comment, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -132,29 +130,29 @@ func (s *Storage) ListComments(_ context.Context, postID int64, parentID *int64,
 	}
 
 	end := min(start+limit, len(ids))
-	res := make([]service.Comment, 0, end-start)
+	res := make([]domain.Comment, 0, end-start)
 	for _, id := range ids[start:end] {
 		res = append(res, s.comments[id])
 	}
 	return res, nil
 }
 
-func (s *Storage) GetComment(_ context.Context, id int64) (service.Comment, error) {
+func (s *Storage) GetComment(_ context.Context, id int64) (domain.Comment, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	c, ok := s.comments[id]
 	if !ok {
-		return service.Comment{}, service.ErrCommentNotFound
+		return domain.Comment{}, domain.ErrCommentNotFound
 	}
 	return c, nil
 }
 
-func (s *Storage) ListRepliesBatch(_ context.Context, parentIDs []int64, limit int) (map[int64][]service.Comment, error) {
+func (s *Storage) ListRepliesBatch(_ context.Context, parentIDs []int64, limit int) (map[int64][]domain.Comment, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	res := make(map[int64][]service.Comment, len(parentIDs))
+	res := make(map[int64][]domain.Comment, len(parentIDs))
 	for _, pid := range parentIDs {
 		parent, ok := s.comments[pid]
 		if !ok {
@@ -162,7 +160,7 @@ func (s *Storage) ListRepliesBatch(_ context.Context, parentIDs []int64, limit i
 		}
 		ids := s.children[childKey{postID: parent.PostID, parentID: pid}]
 		ids = ids[:min(limit, len(ids))]
-		replies := make([]service.Comment, 0, len(ids))
+		replies := make([]domain.Comment, 0, len(ids))
 		for _, id := range ids {
 			replies = append(replies, s.comments[id])
 		}

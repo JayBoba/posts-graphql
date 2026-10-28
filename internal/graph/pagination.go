@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/JayBoba/posts-graphql/internal/domain"
 	"github.com/JayBoba/posts-graphql/internal/graph/model"
-	"github.com/JayBoba/posts-graphql/internal/service"
 )
 
 func encodeCursor(id int64) string {
@@ -19,11 +19,11 @@ func decodeCursor(cursor *string) (*int64, error) {
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(*cursor)
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid cursor", service.ErrInvalidInput)
+		return nil, fmt.Errorf("%w: invalid cursor", domain.ErrInvalidInput)
 	}
 	id, err := strconv.ParseInt(string(raw), 10, 64)
 	if err != nil || id <= 0 {
-		return nil, fmt.Errorf("%w: invalid cursor", service.ErrInvalidInput)
+		return nil, fmt.Errorf("%w: invalid cursor", domain.ErrInvalidInput)
 	}
 	return &id, nil
 }
@@ -35,7 +35,7 @@ func pageSize(first *int32, def int) int {
 	return int(*first)
 }
 
-func postConnection(p service.Page[service.Post]) *model.PostConnection {
+func postConnection(p domain.Page[domain.Post]) *model.PostConnection {
 	conn := &model.PostConnection{
 		Edges:    make([]*model.PostEdge, 0, len(p.Items)),
 		PageInfo: &model.PageInfo{HasNextPage: p.HasNext},
@@ -50,7 +50,7 @@ func postConnection(p service.Page[service.Post]) *model.PostConnection {
 	return conn
 }
 
-func commentConnection(p service.Page[service.Comment]) *model.CommentConnection {
+func commentConnection(p domain.Page[domain.Comment]) *model.CommentConnection {
 	conn := &model.CommentConnection{
 		Edges:    make([]*model.CommentEdge, 0, len(p.Items)),
 		PageInfo: &model.PageInfo{HasNextPage: p.HasNext},

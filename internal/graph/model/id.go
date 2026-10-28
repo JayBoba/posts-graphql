@@ -5,7 +5,7 @@ import (
 
 	"github.com/99designs/gqlgen/graphql"
 
-	"github.com/JayBoba/posts-graphql/internal/service"
+	"github.com/JayBoba/posts-graphql/internal/domain"
 )
 
 // MarshalID and UnmarshalID bind the GraphQL ID scalar to int64 (see gqlgen.yml).
@@ -19,7 +19,7 @@ func MarshalID(id int64) graphql.Marshaler {
 func UnmarshalID(v any) (int64, error) {
 	id, err := graphql.UnmarshalInt64(v)
 	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("%w: invalid id %v", service.ErrInvalidInput, v)
+		return 0, fmt.Errorf("%w: invalid id %v", domain.ErrInvalidInput, v)
 	}
 	return id, nil
 }

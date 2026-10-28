@@ -7,6 +7,7 @@ import (
 	"github.com/99designs/gqlgen/graphql"
 	"github.com/vikstrous/dataloadgen"
 
+	"github.com/JayBoba/posts-graphql/internal/domain"
 	"github.com/JayBoba/posts-graphql/internal/service"
 )
 
@@ -16,7 +17,7 @@ type repliesKey struct {
 }
 
 type loaders struct {
-	replies *dataloadgen.Loader[repliesKey, service.Page[service.Comment]]
+	replies *dataloadgen.Loader[repliesKey, domain.Page[domain.Comment]]
 }
 
 type loadersCtxKey struct{}
@@ -29,7 +30,7 @@ func WithLoaders(svc *service.Service) graphql.OperationMiddleware {
 	return func(ctx context.Context, next graphql.OperationHandler) graphql.ResponseHandler {
 		l := &loaders{
 			replies: dataloadgen.NewLoader(
-				func(ctx context.Context, keys []repliesKey) ([]service.Page[service.Comment], []error) {
+				func(ctx context.Context, keys []repliesKey) ([]domain.Page[domain.Comment], []error) {
 					return loadReplies(ctx, svc, keys)
 				},
 				dataloadgen.WithWait(time.Millisecond),
@@ -44,13 +45,13 @@ func loadersFrom(ctx context.Context) *loaders {
 	return l
 }
 
-func loadReplies(ctx context.Context, svc *service.Service, keys []repliesKey) ([]service.Page[service.Comment], []error) {
+func loadReplies(ctx context.Context, svc *service.Service, keys []repliesKey) ([]domain.Page[domain.Comment], []error) {
 	idsByFirst := make(map[int][]int64)
 	for _, k := range keys {
 		idsByFirst[k.first] = append(idsByFirst[k.first], k.parentID)
 	}
 
-	pages := make(map[repliesKey]service.Page[service.Comment], len(keys))
+	pages := make(map[repliesKey]domain.Page[domain.Comment], len(keys))
 	for first, ids := range idsByFirst {
 		byParent, err := svc.ListRepliesBatch(ctx, ids, first)
 		if err != nil {
@@ -58,13 +59,13 @@ func loadReplies(ctx context.Context, svc *service.Service, keys []repliesKey) (
 			for i := range errs {
 				errs[i] = err
 			}
-			return make([]service.Page[service.Comment], len(keys)), errs
+			return make([]domain.Page[domain.Comment], len(keys)), errs
 		}
 		for id, p := range byParent {
 			pages[repliesKey{parentID: id, first: first}] = p
 		}
 	}
-	res := make([]service.Page[service.Comment], len(keys))
+	res := make([]domain.Page[domain.Comment], len(keys))
 	for i, k := range keys {
 		res[i] = pages[k]
 	}

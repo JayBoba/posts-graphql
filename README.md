@@ -114,16 +114,27 @@ subscription { commentAdded(postId: 1) { id parentId authorId body } }
 ## Architecture
 
 ```
-cmd/server/            entry point: configuration, storage selection, graceful shutdown
+cmd/server/            entry point: configuration, storage selection, health check, graceful shutdown
+internal/domain/       entities (Post, Comment, Page), text limits, domain errors; imports nothing from the project
+internal/service/      business logic and validation; declares the Storage and Broker interfaces it needs
 internal/graph/        GraphQL: server setup, schema, resolvers, pagination, dataloader, errors, complexity limit
-internal/service/      business logic, validation, domain models and errors, Storage and Broker interfaces
 internal/storage/
   memory/              in-memory storage
   postgres/            PostgreSQL (pgx) + database schema
+  storagetest/         contract tests shared by both storages
 internal/pubsub/       delivers new comments to subscribers
 ```
 
-A request flows `graph → service → storage`. The service depends only on the `Storage` and `Broker` interfaces declared in the `service` package, so storages are interchangeable and can be replaced in tests.
+A request flows `graph → service → storage`. Package dependencies:
+
+```
+graph ──────────► service ──► domain
+storage, pubsub ─────────────► domain
+```
+
+The `Storage` and `Broker` interfaces are declared in `service`, the package that uses them. Go interfaces are satisfied implicitly, so the storages and pub/sub import only `domain` and know nothing about the service: they are standalone adapters that can be swapped or reused. Compile-time checks that they implement the interfaces live in their tests. The GraphQL schema is bound directly to the domain types (`gqlgen.yml`), so there are no duplicate DTOs to map; separate GraphQL models can be introduced once the schema and the domain diverge.
+
+One business rule deliberately lives in the storages: `CreateComment` checks that the post exists, comments are enabled and the parent belongs to the same post atomically with the insert. Checking in the service and inserting afterwards would race with the author disabling comments in between. The contract is documented on the `Storage` interface, and the shared contract tests verify that both storages honor it.
 
 ## Key decisions
 

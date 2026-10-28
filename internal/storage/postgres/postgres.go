@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/JayBoba/posts-graphql/internal/service"
+	"github.com/JayBoba/posts-graphql/internal/domain"
 )
 
 //go:embed schema.sql
@@ -23,8 +23,6 @@ const (
 type Storage struct {
 	pool *pgxpool.Pool
 }
-
-var _ service.Storage = (*Storage)(nil)
 
 func New(ctx context.Context, dsn string) (*Storage, error) {
 	pool, err := pgxpool.New(ctx, dsn)
@@ -47,7 +45,7 @@ func (s *Storage) Close() { s.pool.Close() }
 // Ping checks that the database is reachable; used by the health check.
 func (s *Storage) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }
 
-func (s *Storage) CreatePost(ctx context.Context, p service.Post) (service.Post, error) {
+func (s *Storage) CreatePost(ctx context.Context, p domain.Post) (domain.Post, error) {
 	row := s.pool.QueryRow(ctx,
 		`INSERT INTO posts (author_id, title, body, comments_enabled)
 		 VALUES ($1, $2, $3, $4)
@@ -56,16 +54,16 @@ func (s *Storage) CreatePost(ctx context.Context, p service.Post) (service.Post,
 	return scanPost(row)
 }
 
-func (s *Storage) GetPost(ctx context.Context, id int64) (service.Post, error) {
+func (s *Storage) GetPost(ctx context.Context, id int64) (domain.Post, error) {
 	row := s.pool.QueryRow(ctx, `SELECT `+postColumns+` FROM posts WHERE id = $1`, id)
 	p, err := scanPost(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return service.Post{}, service.ErrPostNotFound
+		return domain.Post{}, domain.ErrPostNotFound
 	}
 	return p, err
 }
 
-func (s *Storage) ListPosts(ctx context.Context, after *int64, limit int) ([]service.Post, error) {
+func (s *Storage) ListPosts(ctx context.Context, after *int64, limit int) ([]domain.Post, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT `+postColumns+` FROM posts
 		 WHERE id < COALESCE($1::bigint, 9223372036854775807)
@@ -77,7 +75,7 @@ func (s *Storage) ListPosts(ctx context.Context, after *int64, limit int) ([]ser
 	}
 	defer rows.Close()
 
-	var res []service.Post
+	var res []domain.Post
 	for rows.Next() {
 		p, err := scanPost(rows)
 		if err != nil {
@@ -88,18 +86,18 @@ func (s *Storage) ListPosts(ctx context.Context, after *int64, limit int) ([]ser
 	return res, rows.Err()
 }
 
-func (s *Storage) SetCommentsEnabled(ctx context.Context, postID int64, enabled bool) (service.Post, error) {
+func (s *Storage) SetCommentsEnabled(ctx context.Context, postID int64, enabled bool) (domain.Post, error) {
 	row := s.pool.QueryRow(ctx,
 		`UPDATE posts SET comments_enabled = $2 WHERE id = $1 RETURNING `+postColumns,
 		postID, enabled)
 	p, err := scanPost(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return service.Post{}, service.ErrPostNotFound
+		return domain.Post{}, domain.ErrPostNotFound
 	}
 	return p, err
 }
 
-func (s *Storage) CreateComment(ctx context.Context, c service.Comment) (service.Comment, error) {
+func (s *Storage) CreateComment(ctx context.Context, c domain.Comment) (domain.Comment, error) {
 	row := s.pool.QueryRow(ctx,
 		`INSERT INTO comments (post_id, parent_id, author_id, body)
 		 SELECT $1::bigint, $2::bigint, $3::text, $4::text
@@ -111,7 +109,7 @@ func (s *Storage) CreateComment(ctx context.Context, c service.Comment) (service
 
 	saved, err := scanComment(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return service.Comment{}, s.whyNotInserted(ctx, c.PostID)
+		return domain.Comment{}, s.whyNotInserted(ctx, c.PostID)
 	}
 	return saved, err
 }
@@ -122,22 +120,22 @@ func (s *Storage) whyNotInserted(ctx context.Context, postID int64) error {
 	case err != nil:
 		return err
 	case !post.CommentsEnabled:
-		return service.ErrCommentsDisabled
+		return domain.ErrCommentsDisabled
 	default:
-		return service.ErrParentNotFound
+		return domain.ErrParentNotFound
 	}
 }
 
-func (s *Storage) GetComment(ctx context.Context, id int64) (service.Comment, error) {
+func (s *Storage) GetComment(ctx context.Context, id int64) (domain.Comment, error) {
 	row := s.pool.QueryRow(ctx, `SELECT `+commentColumns+` FROM comments WHERE id = $1`, id)
 	c, err := scanComment(row)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return service.Comment{}, service.ErrCommentNotFound
+		return domain.Comment{}, domain.ErrCommentNotFound
 	}
 	return c, err
 }
 
-func (s *Storage) ListComments(ctx context.Context, postID int64, parentID *int64, after *int64, limit int) ([]service.Comment, error) {
+func (s *Storage) ListComments(ctx context.Context, postID int64, parentID *int64, after *int64, limit int) ([]domain.Comment, error) {
 	var (
 		rows pgx.Rows
 		err  error
@@ -163,21 +161,21 @@ func (s *Storage) ListComments(ctx context.Context, postID int64, parentID *int6
 	return collectComments(rows)
 }
 
-func scanPost(row pgx.Row) (service.Post, error) {
-	var p service.Post
+func scanPost(row pgx.Row) (domain.Post, error) {
+	var p domain.Post
 	err := row.Scan(&p.ID, &p.AuthorID, &p.Title, &p.Body, &p.CommentsEnabled, &p.CreatedAt)
 	return p, err
 }
 
-func scanComment(row pgx.Row) (service.Comment, error) {
-	var c service.Comment
+func scanComment(row pgx.Row) (domain.Comment, error) {
+	var c domain.Comment
 	err := row.Scan(&c.ID, &c.PostID, &c.ParentID, &c.AuthorID, &c.Body, &c.CreatedAt)
 	return c, err
 }
 
-func collectComments(rows pgx.Rows) ([]service.Comment, error) {
+func collectComments(rows pgx.Rows) ([]domain.Comment, error) {
 	defer rows.Close()
-	var res []service.Comment
+	var res []domain.Comment
 	for rows.Next() {
 		c, err := scanComment(rows)
 		if err != nil {
@@ -188,7 +186,7 @@ func collectComments(rows pgx.Rows) ([]service.Comment, error) {
 	return res, rows.Err()
 }
 
-func (s *Storage) ListRepliesBatch(ctx context.Context, parentIDs []int64, limit int) (map[int64][]service.Comment, error) {
+func (s *Storage) ListRepliesBatch(ctx context.Context, parentIDs []int64, limit int) (map[int64][]domain.Comment, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT c.id, c.post_id, c.parent_id, c.author_id, c.body, c.created_at
 		 FROM unnest($1::bigint[]) AS p(pid)
@@ -206,7 +204,7 @@ func (s *Storage) ListRepliesBatch(ctx context.Context, parentIDs []int64, limit
 	if err != nil {
 		return nil, err
 	}
-	res := make(map[int64][]service.Comment, len(parentIDs))
+	res := make(map[int64][]domain.Comment, len(parentIDs))
 	for _, c := range comments {
 		res[*c.ParentID] = append(res[*c.ParentID], c)
 	}

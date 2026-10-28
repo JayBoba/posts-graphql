@@ -11,6 +11,7 @@ import (
 	"github.com/99designs/gqlgen/client"
 	"github.com/stretchr/testify/require"
 
+	"github.com/JayBoba/posts-graphql/internal/domain"
 	"github.com/JayBoba/posts-graphql/internal/graph"
 	"github.com/JayBoba/posts-graphql/internal/pubsub"
 	"github.com/JayBoba/posts-graphql/internal/service"
@@ -25,17 +26,17 @@ type spyStorage struct {
 	failListPosts    error
 }
 
-func (s *spyStorage) ListComments(ctx context.Context, postID int64, parentID, after *int64, limit int) ([]service.Comment, error) {
+func (s *spyStorage) ListComments(ctx context.Context, postID int64, parentID, after *int64, limit int) ([]domain.Comment, error) {
 	s.listComments.Add(1)
 	return s.Storage.ListComments(ctx, postID, parentID, after, limit)
 }
 
-func (s *spyStorage) ListRepliesBatch(ctx context.Context, parentIDs []int64, limit int) (map[int64][]service.Comment, error) {
+func (s *spyStorage) ListRepliesBatch(ctx context.Context, parentIDs []int64, limit int) (map[int64][]domain.Comment, error) {
 	s.listRepliesBatch.Add(1)
 	return s.Storage.ListRepliesBatch(ctx, parentIDs, limit)
 }
 
-func (s *spyStorage) ListPosts(ctx context.Context, after *int64, limit int) ([]service.Post, error) {
+func (s *spyStorage) ListPosts(ctx context.Context, after *int64, limit int) ([]domain.Post, error) {
 	if s.failListPosts != nil {
 		return nil, s.failListPosts
 	}
@@ -68,7 +69,7 @@ func post(t *testing.T, c *client.Client, query string, opts ...client.Option) (
 func TestErrorCodes(t *testing.T) {
 	c, svc, store := newClient(t)
 	ctx := context.Background()
-	p, err := svc.CreatePost(ctx, service.Post{AuthorID: "author", Title: "t", Body: "b", CommentsEnabled: true})
+	p, err := svc.CreatePost(ctx, domain.Post{AuthorID: "author", Title: "t", Body: "b", CommentsEnabled: true})
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -142,11 +143,11 @@ func TestErrorCodes(t *testing.T) {
 func TestReplies_NoNPlusOne(t *testing.T) {
 	c, svc, store := newClient(t)
 	ctx := context.Background()
-	p, err := svc.CreatePost(ctx, service.Post{AuthorID: "author", Title: "t", Body: "b", CommentsEnabled: true})
+	p, err := svc.CreatePost(ctx, domain.Post{AuthorID: "author", Title: "t", Body: "b", CommentsEnabled: true})
 	require.NoError(t, err)
 
 	comment := func(parentID *int64) int64 {
-		cm, err := svc.CreateComment(ctx, service.Comment{PostID: p.ID, ParentID: parentID, AuthorID: "bob", Body: "text"})
+		cm, err := svc.CreateComment(ctx, domain.Comment{PostID: p.ID, ParentID: parentID, AuthorID: "bob", Body: "text"})
 		require.NoError(t, err)
 		return cm.ID
 	}
@@ -203,12 +204,12 @@ func TestReplies_NoNPlusOne(t *testing.T) {
 func TestComments_CursorPagination(t *testing.T) {
 	c, svc, _ := newClient(t)
 	ctx := context.Background()
-	p, err := svc.CreatePost(ctx, service.Post{AuthorID: "author", Title: "t", Body: "b", CommentsEnabled: true})
+	p, err := svc.CreatePost(ctx, domain.Post{AuthorID: "author", Title: "t", Body: "b", CommentsEnabled: true})
 	require.NoError(t, err)
 
 	var want []int64
 	for range 5 {
-		cm, err := svc.CreateComment(ctx, service.Comment{PostID: p.ID, AuthorID: "bob", Body: "text"})
+		cm, err := svc.CreateComment(ctx, domain.Comment{PostID: p.ID, AuthorID: "bob", Body: "text"})
 		require.NoError(t, err)
 		want = append(want, cm.ID)
 	}
@@ -289,11 +290,11 @@ func TestPostsAndThreads(t *testing.T) {
 
 	// A deep thread is continued from any comment via comment(id), and its
 	// replies are paginated with a cursor too.
-	root, err := svc.CreateComment(ctx, service.Comment{PostID: first.ID, AuthorID: "bob", Body: "root"})
+	root, err := svc.CreateComment(ctx, domain.Comment{PostID: first.ID, AuthorID: "bob", Body: "root"})
 	require.NoError(t, err)
 	var replies []int64
 	for range 3 {
-		r, err := svc.CreateComment(ctx, service.Comment{PostID: first.ID, ParentID: &root.ID, AuthorID: "bob", Body: "reply"})
+		r, err := svc.CreateComment(ctx, domain.Comment{PostID: first.ID, ParentID: &root.ID, AuthorID: "bob", Body: "reply"})
 		require.NoError(t, err)
 		replies = append(replies, r.ID)
 	}
@@ -343,7 +344,7 @@ func TestCommentAdded_Subscription(t *testing.T) {
 	c, svc, _ := newClient(t)
 	ctx := context.Background()
 	newPost := func() int64 {
-		p, err := svc.CreatePost(ctx, service.Post{AuthorID: "author", Title: "t", Body: "b", CommentsEnabled: true})
+		p, err := svc.CreatePost(ctx, domain.Post{AuthorID: "author", Title: "t", Body: "b", CommentsEnabled: true})
 		require.NoError(t, err)
 		return p.ID
 	}
@@ -364,8 +365,8 @@ func TestCommentAdded_Subscription(t *testing.T) {
 			case <-done:
 				return
 			case <-ticker.C:
-				_, _ = svc.CreateComment(ctx, service.Comment{PostID: otherID, AuthorID: "bob", Body: "other post"})
-				_, _ = svc.CreateComment(ctx, service.Comment{PostID: postID, AuthorID: "bob", Body: "live"})
+				_, _ = svc.CreateComment(ctx, domain.Comment{PostID: otherID, AuthorID: "bob", Body: "other post"})
+				_, _ = svc.CreateComment(ctx, domain.Comment{PostID: postID, AuthorID: "bob", Body: "live"})
 			}
 		}
 	}()
