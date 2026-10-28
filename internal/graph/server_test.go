@@ -416,3 +416,29 @@ func TestComplexityLimit(t *testing.T) {
 	require.Len(t, errs, 1)
 	require.Equal(t, "COMPLEXITY_LIMIT_EXCEEDED", errs[0].Extensions["code"])
 }
+
+func TestReplies_BatchErrorsAreIsolated(t *testing.T) {
+	c, svc, _ := newClient(t)
+	ctx := context.Background()
+	p, err := svc.CreatePost(ctx, domain.Post{AuthorID: "author", Title: "t", Body: "b", CommentsEnabled: true})
+	require.NoError(t, err)
+	root, err := svc.CreateComment(ctx, domain.Comment{PostID: p.ID, AuthorID: "bob", Body: "root"})
+	require.NoError(t, err)
+	_, err = svc.CreateComment(ctx, domain.Comment{PostID: p.ID, ParentID: &root.ID, AuthorID: "bob", Body: "reply"})
+	require.NoError(t, err)
+
+	// Both aliases go into one dataloader batch with different page sizes.
+	// Only the invalid one must report an error.
+	resp, err := c.RawPost(`query($id: ID!) { post(id: $id) { comments { edges { node {
+		good: replies(first: 2) { edges { node { id } } }
+		bad: replies(first: 0) { edges { node { id } } }
+	} } } } }`, client.Var("id", p.ID))
+	require.NoError(t, err)
+
+	var errs []struct {
+		Path []any
+	}
+	require.NoError(t, json.Unmarshal(resp.Errors, &errs))
+	require.Len(t, errs, 1)
+	require.Equal(t, "bad", errs[0].Path[len(errs[0].Path)-1])
+}

@@ -51,23 +51,31 @@ func loadReplies(ctx context.Context, svc *service.Service, keys []repliesKey) (
 		idsByFirst[k.first] = append(idsByFirst[k.first], k.parentID)
 	}
 
+	// A failed group (e.g. first: 0) must fail only its own keys, not the
+	// other page sizes requested in the same batch.
 	pages := make(map[repliesKey]domain.Page[domain.Comment], len(keys))
+	groupErrs := make(map[int]error)
 	for first, ids := range idsByFirst {
 		byParent, err := svc.ListRepliesBatch(ctx, ids, first)
 		if err != nil {
-			errs := make([]error, len(keys))
-			for i := range errs {
-				errs[i] = err
-			}
-			return make([]domain.Page[domain.Comment], len(keys)), errs
+			groupErrs[first] = err
+			continue
 		}
 		for id, p := range byParent {
 			pages[repliesKey{parentID: id, first: first}] = p
 		}
 	}
+
 	res := make([]domain.Page[domain.Comment], len(keys))
+	var errs []error
+	if len(groupErrs) > 0 {
+		errs = make([]error, len(keys))
+	}
 	for i, k := range keys {
 		res[i] = pages[k]
+		if errs != nil {
+			errs[i] = groupErrs[k.first]
+		}
 	}
-	return res, nil
+	return res, errs
 }
