@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/99designs/gqlgen/client"
 	"github.com/stretchr/testify/require"
@@ -232,4 +233,158 @@ func TestComments_CursorPagination(t *testing.T) {
 		after = resp.Post.Comments.PageInfo.EndCursor
 	}
 	require.Equal(t, want, got)
+}
+
+func TestPostsAndThreads(t *testing.T) {
+	c, svc, _ := newClient(t)
+	ctx := context.Background()
+
+	var created struct {
+		CreatePost struct {
+			ID              int64
+			AuthorID        string
+			CommentsEnabled bool
+		}
+	}
+	c.MustPost(`mutation { createPost(input: {authorId: " alice ", title: "first", body: "b"}) { id authorId commentsEnabled } }`, &created)
+	first := created.CreatePost
+	require.Equal(t, "alice", first.AuthorID)
+	require.True(t, first.CommentsEnabled)
+
+	c.MustPost(`mutation { createPost(input: {authorId: "alice", title: "second", body: "b", commentsEnabled: false}) { id authorId commentsEnabled } }`, &created)
+	second := created.CreatePost
+	require.False(t, second.CommentsEnabled)
+
+	type postsPage struct {
+		Posts struct {
+			Edges    []struct{ Node struct{ ID int64 } }
+			PageInfo struct {
+				EndCursor   string
+				HasNextPage bool
+			}
+		}
+	}
+	// Newest first.
+	var page postsPage
+	c.MustPost(`{ posts(first: 1) { edges { node { id } } pageInfo { endCursor hasNextPage } } }`, &page)
+	require.Len(t, page.Posts.Edges, 1)
+	require.Equal(t, second.ID, page.Posts.Edges[0].Node.ID)
+	require.True(t, page.Posts.PageInfo.HasNextPage)
+
+	c.MustPost(`query($after: String) { posts(first: 1, after: $after) { edges { node { id } } pageInfo { endCursor hasNextPage } } }`,
+		&page, client.Var("after", page.Posts.PageInfo.EndCursor))
+	require.Len(t, page.Posts.Edges, 1)
+	require.Equal(t, first.ID, page.Posts.Edges[0].Node.ID)
+	require.False(t, page.Posts.PageInfo.HasNextPage)
+
+	// A deep thread is continued from any comment via comment(id), and its
+	// replies are paginated with a cursor too.
+	root, err := svc.CreateComment(ctx, service.Comment{PostID: first.ID, AuthorID: "bob", Body: "root"})
+	require.NoError(t, err)
+	var replies []int64
+	for range 3 {
+		r, err := svc.CreateComment(ctx, service.Comment{PostID: first.ID, ParentID: &root.ID, AuthorID: "bob", Body: "reply"})
+		require.NoError(t, err)
+		replies = append(replies, r.ID)
+	}
+
+	type thread struct {
+		Comment *struct {
+			ID      int64
+			Replies struct {
+				Edges    []struct{ Node struct{ ID int64 } }
+				PageInfo struct {
+					EndCursor   string
+					HasNextPage bool
+				}
+			}
+		}
+	}
+	const threadQuery = `query($id: ID!, $after: String) {
+		comment(id: $id) { id replies(first: 2, after: $after) {
+			edges { node { id } }
+			pageInfo { endCursor hasNextPage }
+		} }
+	}`
+	var th thread
+	c.MustPost(threadQuery, &th, client.Var("id", root.ID))
+	require.NotNil(t, th.Comment)
+	require.Equal(t, replies[:2], nodeIDs(th.Comment.Replies.Edges))
+	require.True(t, th.Comment.Replies.PageInfo.HasNextPage)
+
+	c.MustPost(threadQuery, &th, client.Var("id", root.ID), client.Var("after", th.Comment.Replies.PageInfo.EndCursor))
+	require.Equal(t, replies[2:], nodeIDs(th.Comment.Replies.Edges))
+	require.False(t, th.Comment.Replies.PageInfo.HasNextPage)
+
+	th = thread{}
+	c.MustPost(threadQuery, &th, client.Var("id", root.ID+1000))
+	require.Nil(t, th.Comment)
+}
+
+func nodeIDs(edges []struct{ Node struct{ ID int64 } }) []int64 {
+	ids := make([]int64, 0, len(edges))
+	for _, e := range edges {
+		ids = append(ids, e.Node.ID)
+	}
+	return ids
+}
+
+func TestCommentAdded_Subscription(t *testing.T) {
+	c, svc, _ := newClient(t)
+	ctx := context.Background()
+	newPost := func() int64 {
+		p, err := svc.CreatePost(ctx, service.Post{AuthorID: "author", Title: "t", Body: "b", CommentsEnabled: true})
+		require.NoError(t, err)
+		return p.ID
+	}
+	postID, otherID := newPost(), newPost()
+
+	sub := c.Websocket(`subscription($id: ID!) { commentAdded(postId: $id) { postId body } }`, client.Var("id", postID))
+	defer func() { _ = sub.Close() }()
+
+	// The server registers the subscription asynchronously after the start
+	// message, so keep commenting until the first event arrives.
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				_, _ = svc.CreateComment(ctx, service.Comment{PostID: otherID, AuthorID: "bob", Body: "other post"})
+				_, _ = svc.CreateComment(ctx, service.Comment{PostID: postID, AuthorID: "bob", Body: "live"})
+			}
+		}
+	}()
+
+	type event struct {
+		CommentAdded struct {
+			PostID int64
+			Body   string
+		}
+	}
+	got := make(chan event, 1)
+	errs := make(chan error, 1)
+	go func() {
+		var e event
+		if err := sub.Next(&e); err != nil {
+			errs <- err
+			return
+		}
+		got <- e
+	}()
+
+	select {
+	case e := <-got:
+		// Comments on the other post must not reach this subscriber.
+		require.Equal(t, postID, e.CommentAdded.PostID)
+		require.Equal(t, "live", e.CommentAdded.Body)
+	case err := <-errs:
+		t.Fatal(err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("no event received")
+	}
 }
