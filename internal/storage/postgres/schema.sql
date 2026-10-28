@@ -1,8 +1,8 @@
 CREATE TABLE IF NOT EXISTS posts (
     id               BIGSERIAL PRIMARY KEY,
     author_id        TEXT        NOT NULL,
-    title            TEXT        NOT NULL,
-    body             TEXT        NOT NULL,
+    title            TEXT        NOT NULL CHECK (char_length(title) <= 300),
+    body             TEXT        NOT NULL CHECK (char_length(body) <= 100000),
     comments_enabled BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
