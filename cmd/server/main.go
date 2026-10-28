@@ -66,12 +66,18 @@ func run() error {
 	mux.Handle("/query", graph.NewServer(svc))
 	mux.Handle("GET /healthz", healthHandler(store))
 
+	// Request contexts derive from baseCtx, not from the signal context: on SIGTERM
+	// in-flight requests must be allowed to finish, so baseCtx is cancelled only
+	// after Shutdown has drained them.
+	baseCtx, cancelBase := context.WithCancel(context.Background())
+	defer cancelBase()
+
 	httpSrv := &http.Server{
 		Addr:              ":" + *port,
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		// No WriteTimeout: subscriptions keep the WebSocket open.
-		BaseContext: func(net.Listener) context.Context { return ctx },
+		BaseContext: func(net.Listener) context.Context { return baseCtx },
 	}
 
 	errCh := make(chan error, 1)
@@ -89,7 +95,11 @@ func run() error {
 	log.Print("shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return httpSrv.Shutdown(shutdownCtx)
+	err := httpSrv.Shutdown(shutdownCtx)
+	// Shutdown does not track hijacked WebSocket connections; cancelling the base
+	// context ends the subscriptions so their clients are disconnected cleanly.
+	cancelBase()
+	return err
 }
 
 func envOr(key, def string) string {
