@@ -187,3 +187,27 @@ func TestCreateComment_Concurrent(t *testing.T) {
 	}
 	require.Len(t, seen, n)
 }
+
+func TestListRepliesBatch(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newService(t)
+	post := createPost(t, svc, "author", true)
+
+	newComment := func(parentID *int64) service.Comment {
+		c, err := svc.CreateComment(ctx, service.Comment{PostID: post.ID, ParentID: parentID, AuthorID: "bob", Body: "text"})
+		require.NoError(t, err)
+		return c
+	}
+	a := newComment(nil)
+	b := newComment(nil)
+	for range 3 {
+		newComment(ptr(a.ID))
+	}
+
+	pages, err := svc.ListRepliesBatch(ctx, []int64{a.ID, b.ID}, 2)
+	require.NoError(t, err)
+	require.Len(t, pages[a.ID].Items, 2)
+	require.True(t, pages[a.ID].HasNext)
+	require.Empty(t, pages[b.ID].Items)
+	require.False(t, pages[b.ID].HasNext)
+}

@@ -149,3 +149,24 @@ func (s *Storage) GetComment(_ context.Context, id int64) (service.Comment, erro
 	}
 	return c, nil
 }
+
+func (s *Storage) ListRepliesBatch(_ context.Context, parentIDs []int64, limit int) (map[int64][]service.Comment, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	res := make(map[int64][]service.Comment, len(parentIDs))
+	for _, pid := range parentIDs {
+		parent, ok := s.comments[pid]
+		if !ok {
+			continue
+		}
+		ids := s.children[childKey{postID: parent.PostID, parentID: pid}]
+		ids = ids[:min(limit, len(ids))]
+		replies := make([]service.Comment, 0, len(ids))
+		for _, id := range ids {
+			replies = append(replies, s.comments[id])
+		}
+		res[pid] = replies
+	}
+	return res, nil
+}

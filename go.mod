@@ -23,6 +23,9 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/sosodev/duration v1.4.0 // indirect
 	github.com/urfave/cli/v3 v3.14.0 // indirect
+	github.com/vikstrous/dataloadgen v0.0.10 // direct
+	go.opentelemetry.io/otel v1.11.1 // indirect
+	go.opentelemetry.io/otel/trace v1.11.1 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect

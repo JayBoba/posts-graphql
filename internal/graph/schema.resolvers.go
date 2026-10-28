@@ -15,11 +15,21 @@ import (
 
 // Replies is the resolver for the replies field.
 func (r *commentResolver) Replies(ctx context.Context, obj *service.Comment, first *int32, after *string) (*model.CommentConnection, error) {
+	n := pageSize(first, defaultRepliesPageSize)
+
+	if l := loadersFrom(ctx); l != nil && after == nil {
+		page, err := l.replies.Load(ctx, repliesKey{parentID: obj.ID, first: n})
+		if err != nil {
+			return nil, err
+		}
+		return commentConnection(page), nil
+	}
+
 	afterID, err := decodeCursor(after)
 	if err != nil {
 		return nil, err
 	}
-	page, err := r.Svc.ListComments(ctx, obj.PostID, &obj.ID, afterID, pageSize(first, defaultRepliesPageSize))
+	page, err := r.Svc.ListComments(ctx, obj.PostID, &obj.ID, afterID, n)
 	if err != nil {
 		return nil, err
 	}

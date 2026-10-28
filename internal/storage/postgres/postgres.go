@@ -183,3 +183,28 @@ func collectComments(rows pgx.Rows) ([]service.Comment, error) {
 	}
 	return res, rows.Err()
 }
+
+func (s *Storage) ListRepliesBatch(ctx context.Context, parentIDs []int64, limit int) (map[int64][]service.Comment, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT c.id, c.post_id, c.parent_id, c.author_id, c.body, c.created_at
+		 FROM unnest($1::bigint[]) AS p(pid)
+		 CROSS JOIN LATERAL (
+		     SELECT `+commentColumns+` FROM comments
+		     WHERE parent_id = p.pid
+		     ORDER BY id
+		     LIMIT $2
+		 ) AS c`,
+		parentIDs, limit)
+	if err != nil {
+		return nil, err
+	}
+	comments, err := collectComments(rows)
+	if err != nil {
+		return nil, err
+	}
+	res := make(map[int64][]service.Comment, len(parentIDs))
+	for _, c := range comments {
+		res[*c.ParentID] = append(res[*c.ParentID], c)
+	}
+	return res, nil
+}

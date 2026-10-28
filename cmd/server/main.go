@@ -63,7 +63,7 @@ func main() {
 	srv.SetErrorPresenter(graph.ErrorPresenter)
 
 	http.Handle("/", playground.Handler("GraphQL playground", "/query"))
-	http.Handle("/query", srv)
+	http.Handle("/query", graph.LoadersMiddleware(svc, srv))
 
 	log.Printf("storage=%s, playground: http://localhost:%s/", *storageType, *port)
 	log.Fatal(http.ListenAndServe(":"+*port, nil))

@@ -116,3 +116,19 @@ func (s *Service) SubscribeComments(ctx context.Context, postID int64) (<-chan *
 func (s *Service) GetComment(ctx context.Context, id int64) (Comment, error) {
 	return s.storage.GetComment(ctx, id)
 }
+
+func (s *Service) ListRepliesBatch(ctx context.Context, parentIDs []int64, first int) (map[int64]Page[Comment], error) {
+	limit, err := pageSize(first)
+	if err != nil {
+		return nil, err
+	}
+	byParent, err := s.storage.ListRepliesBatch(ctx, parentIDs, limit+1)
+	if err != nil {
+		return nil, err
+	}
+	res := make(map[int64]Page[Comment], len(parentIDs))
+	for _, id := range parentIDs {
+		res[id] = makePage(byParent[id], limit)
+	}
+	return res, nil
+}
