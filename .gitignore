@@ -3,5 +3,4 @@ bin/
 *.out
 .idea/
 .vscode/
-.git
 *.exe
