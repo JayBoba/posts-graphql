@@ -6,8 +6,9 @@ import (
 	"log/slog"
 
 	"github.com/99designs/gqlgen/graphql"
-	"github.com/JayBoba/posts-graphql/internal/service"
 	"github.com/vektah/gqlparser/v2/gqlerror"
+
+	"github.com/JayBoba/posts-graphql/internal/service"
 )
 
 // internalError marks a technical resolver error (e.g. from the database)
